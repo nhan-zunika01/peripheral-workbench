@@ -1,0 +1,41 @@
+# Credentials and local configuration
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+*.pem
+*.key
+*.pfx
+*.p12
+.mcp.json
+
+# Dependencies and generated builds
+node_modules/
+.wrangler/
+target/
+coverage/
+test-results/
+playwright-report/
+*.log
+
+# Local agent tools, databases and working copies
+/.agents/
+/.claude/
+/.claude-flow/
+/.playwright-cli/
+/.superpowers/
+/.swarm/
+/.taste-skill/
+/CLAUDE.md
+/designs/
+
+# Private device captures and extracted third-party application files
+/docs/*
+!/docs/setup.md
+
+# Editor and operating-system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

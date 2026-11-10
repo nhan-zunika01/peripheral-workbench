@@ -1,0 +1,9 @@
+{
+  "model": "Razer Viper V3 Pro SE",
+  "status": "awaiting-permitted-image",
+  "source": null,
+  "creator": null,
+  "license": null,
+  "views": { "top": null, "side": null, "thumbnail": null },
+  "reference": { "file": "reference.svg", "kind": "UI schematic", "source": "designs/ui-redesign/src/synapse-console/workspace.html", "note": "Static reference diagram, not a model photograph or verified assignments." }
+}

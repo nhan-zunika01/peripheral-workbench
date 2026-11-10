@@ -1,0 +1,25 @@
+{
+  "name": "peripheral-workbench",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "predev": "node scripts/sync-vendor.mjs",
+    "prebuild": "node scripts/sync-vendor.mjs",
+    "start": "node scripts/start.mjs",
+    "dev": "wrangler dev",
+    "build": "wrangler deploy --dry-run --outdir .wrangler/build",
+    "deploy": "wrangler deploy",
+    "bridge": "node scripts/bridge.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "test:ui": "node scripts/verify-ui.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.64.1",
+    "wrangler": "^4.0.0",
+    "ws": "^8.21.0"
+  },
+  "dependencies": {
+    "gsap": "3.15.0"
+  }
+}

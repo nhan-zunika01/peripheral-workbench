@@ -1,0 +1,5 @@
+GSAP 3.15.0 and Flip plugin
+Copyright GreenSock.
+License: Standard 'no charge' license: https://gsap.com/standard-license.
+https://gsap.com/standard-license/
+Exact distribution bytes copied from the installed gsap npm package.

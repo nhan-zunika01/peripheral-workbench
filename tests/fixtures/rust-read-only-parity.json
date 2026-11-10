@@ -1,0 +1,84 @@
+{
+  "capturedAt": "2026-11-02T04:38:46.415Z",
+  "scope": "One connected Viper V3 Pro SE, read-only sequential comparison; no physical writes",
+  "helperSha256": "9f0a3940c6545aef83115c39b8a685862af3d27aea139bad2a57c12dfa7ad296",
+  "hardwareWritesTested": false,
+  "observations": [
+    {
+      "transport": "native",
+      "enumerationMs": 389.2802,
+      "snapshotMs": 3336.0379000000003,
+      "hidCount": 12,
+      "physicalDeviceCount": 1,
+      "interfaceCounts": [
+        31
+      ],
+      "connected": true,
+      "settingIds": [
+        "firmware",
+        "dpi",
+        "dpiStages",
+        "polling",
+        "battery",
+        "sleep",
+        "lowPower",
+        "rotation",
+        "dynamicState",
+        "dynamicMode",
+        "customCurve",
+        "calibrationState",
+        "asymmetricTracking",
+        "smartTracking"
+      ],
+      "settingsDigest": "bfbe5df7ba21915d46240e7c5adb60e4d04e5cf4a16c95eed34d6719ff60a9da",
+      "unavailable": [
+        "Wired polling rate (Hz): Device rejected the command (status 5)",
+        "Wireless polling rate (Hz): Device rejected the command (status 5)"
+      ]
+    },
+    {
+      "transport": "rust",
+      "enumerationMs": 244.0935999999997,
+      "snapshotMs": 2114.6058999999996,
+      "hidCount": 12,
+      "physicalDeviceCount": 1,
+      "interfaceCounts": [
+        31
+      ],
+      "connected": true,
+      "settingIds": [
+        "firmware",
+        "dpi",
+        "dpiStages",
+        "polling",
+        "battery",
+        "sleep",
+        "lowPower",
+        "rotation",
+        "dynamicState",
+        "dynamicMode",
+        "customCurve",
+        "calibrationState",
+        "asymmetricTracking",
+        "smartTracking"
+      ],
+      "settingsDigest": "bfbe5df7ba21915d46240e7c5adb60e4d04e5cf4a16c95eed34d6719ff60a9da",
+      "unavailable": [
+        "Wired polling rate (Hz): Device rejected the command (status 5)",
+        "Wireless polling rate (Hz): Device rejected the command (status 5)"
+      ]
+    }
+  ],
+  "comparison": {
+    "physicalIdentityEqual": true,
+    "fullSettingsEqual": true,
+    "customCurveSamples": 250,
+    "unavailableEqual": true,
+    "rustSettingsReadOnly": true
+  },
+  "limitations": [
+    "One sample per transport, no performance improvement claim",
+    "No hardware write/unplug/reconnect/two-same-model-device tests",
+    "Settings handlers remain shared JavaScript; Rust owns HID and framing/validation"
+  ]
+}

@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#111111">
+  <meta name="description" content="Independent local device control. View connected devices and adjust their supported settings.">
+  <title>Peripheral Workbench</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+  <script defer src="/vendor/gsap/gsap.min.js"></script>
+  <script defer src="/vendor/gsap/Flip.min.js"></script>
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#content" data-i18n="skip">Skip to content</a>
+  <aside id="sidebar" class="sidebar">
+    <a href="#dashboard" class="wordmark" aria-label="Peripheral Workbench">Peripheral Workbench</a>
+    <p class="brand-note" data-i18n="independent">Independent local utility</p>
+    <nav aria-label="Navigation" id="main-nav">
+      <a href="#dashboard" data-nav="devices" data-i18n="devices">Devices</a>
+      <a href="#macros" data-nav="macros" data-i18n="macros">Macros</a>
+      <a href="#profiles" data-nav="profiles" data-i18n="profiles">Profiles</a>
+      <a href="#review" data-nav="review" data-i18n="reviewChanges">Review changes</a>
+      <a href="#settings" data-nav="settings" data-i18n="settings">Settings</a>
+    </nav>
+    <div class="companion-status">
+      <p id="companion-label">Connecting…</p>
+      <p class="local-status"><span id="connection-dot" class="connection-dot" aria-hidden="true"></span><span data-i18n="localConnection">Local connection</span></p>
+    </div>
+  </aside>
+  <div class="workspace">
+    <div class="topbar">
+      <button id="menu-toggle" class="menu-toggle" type="button" aria-label="Navigation menu" aria-expanded="false" aria-controls="sidebar">Menu</button>
+      <a href="#dashboard" class="mobile-wordmark">Peripheral Workbench</a>
+      <div id="breadcrumb" class="breadcrumb">Devices / Overview</div>
+      <span class="topbar-local" data-i18n="local">Local companion</span>
+    </div>
+    <main id="content" tabindex="-1">
+      <div id="connection-banner" class="connection-banner" hidden></div>
+      <div id="view"><header class="view-header"><h1>Devices</h1></header><p>Connecting to the Windows companion…</p></div>
+      <p id="app-status" class="app-status" role="status" aria-live="polite"></p>
+    </main>
+  </div>
+  <dialog id="confirmation" aria-labelledby="dialog-title" aria-describedby="dialog-description">
+    <form method="dialog">
+      <h2 id="dialog-title"></h2>
+      <p id="dialog-description"></p>
+      <div class="dialog-actions">
+        <button id="dialog-cancel" class="secondary" value="cancel" autofocus>Keep editing</button>
+        <button id="dialog-confirm" class="primary" value="confirm">Discard changes</button>
+      </div>
+    </form>
+  </dialog>
+  <noscript><p class="noscript">JavaScript is required to connect to the Windows companion and read device settings.</p></noscript>
+</body>
+</html>
