@@ -232,6 +232,38 @@ fn listener_failure_cleans_new_normal_guard_but_preserves_recovery_guard() {
         }
     }
 }
+
+#[test]
+fn production_backend_rejects_write_mode_before_listener_registration() {
+    let path = std::env::temp_dir().join(format!(
+        "razer-unverified-production-{}.json",
+        razer_hid_helper::process::nonce().unwrap()
+    ));
+    let guard = SessionGuard::create_with_mode(path.clone(), true).unwrap();
+    let registered = AtomicBool::new(false);
+    let result: Result<PhysicalBackend<_, ()>, _> = PhysicalBackend::with_listener(
+        "unused.exe".into(),
+        true,
+        guard,
+        Arc::new(ExclusiveSocket::reserve(0).unwrap()),
+        |_| {
+            registered.store(true, Ordering::SeqCst);
+            Err("fixture listener must not register".into())
+        },
+    );
+    let error = result
+        .err()
+        .expect("unverified hardware write mode must fail");
+    assert!(!registered.load(Ordering::SeqCst));
+    assert_eq!(error.status, 400);
+    assert!(error
+        .error
+        .contains("no verified model/firmware/setting evidence"));
+    assert!(
+        !path.exists(),
+        "the rejected startup must clean its new childless guard"
+    );
+}
 #[test]
 fn transaction_reports_stale_or_incomplete_identity_409_and_real_readonly_400() {
     use razer_hid_helper::backend::transact;

@@ -29,10 +29,30 @@ playwright-report/
 /.taste-skill/
 /CLAUDE.md
 /designs/
+/graphify-out/
 
 # Private device captures and extracted third-party application files
 /docs/*
 !/docs/setup.md
+!/docs/roadmap.md
+!/docs/audits/
+/docs/audits/*
+!/docs/audits/2026-11-13-project-audit.md
+!/docs/audits/2026-11-13-source-manifest.json
+!/docs/superpowers/
+/docs/superpowers/*
+!/docs/superpowers/plans/
+/docs/superpowers/plans/*
+!/docs/superpowers/plans/2026-11-13-stability-open-source.md
+!/docs/quality/
+/docs/quality/*
+!/docs/quality/baseline.md
+!/docs/quality/m0-evidence.json
+!/docs/quality/m0-validation.json
+!/docs/legal/
+/docs/legal/*
+!/docs/legal/provenance.csv
+!/docs/legal/status.md
 
 # Editor and operating-system files
 .vscode/

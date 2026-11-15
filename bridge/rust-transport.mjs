@@ -3,11 +3,11 @@ import { isAbsolute } from 'node:path';
 import nativeHost from './native-host.cjs';
 
 // Experimental transport: native remains the default until hardware parity is verified.
-export function rustRequest(request, { executable = process.env.RAZER_RUST_HELPER, allowWrites = process.env.RAZER_RUST_ALLOW_WRITES === '1', spawnHelper = spawn } = {}) {
+export function rustRequest(request, { executable = process.env.RAZER_RUST_HELPER, spawnHelper = spawn } = {}) {
   if (!executable || !isAbsolute(executable)) return Promise.reject(new Error('RAZER_RUST_HELPER must be an absolute path to the compiled Rust helper'));
-  if (request.action === 'apply' && !allowWrites) return Promise.reject(Object.assign(new Error('Experimental Rust transport is read-only; hardware write parity has not been verified'), { status: 400 }));
+  if (request.action === 'apply') return Promise.reject(Object.assign(new Error('Experimental Rust transport is read-only; hardware write parity has not been verified'), { status: 400 }));
   return new Promise((resolve, reject) => {
-    const child = spawnHelper(executable, allowWrites ? ['--allow-writes'] : [], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawnHelper(executable, [], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
     let pending, output = '', settled = false, finishing = false;
     const uncertain = () => Object.assign(new Error('Rust helper failed or timed out; the setting may have changed. Inspect the device before retrying.'), { status: 502 });
     const finish = (error, result) => {
@@ -54,8 +54,8 @@ export function rustRequest(request, { executable = process.env.RAZER_RUST_HELPE
       } };
       const result = await nativeHost.handleRequest(request, hid);
       if (request.action === 'snapshot') {
-        if (!allowWrites) result.settings = result.settings.map(setting => ({ ...setting, writable: false }));
-        result.message = `Experimental Rust HID transport${allowWrites ? '' : ' (read-only; hardware write parity is unverified)'}. ${result.message}`;
+        result.settings = result.settings.map(setting => ({ ...setting, writable: false }));
+        result.message = `Experimental Rust HID transport (read-only; hardware write parity is unverified). ${result.message}`;
       }
       return result;
     })().then(result => finish(null, result), error => finish(error));

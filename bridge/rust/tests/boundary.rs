@@ -1,12 +1,8 @@
 use std::io::Write;
 use std::process::{Command, Stdio};
 
-fn helper(input: &[u8], allow_writes: bool) -> std::process::Output {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_razer-hid-helper"));
-    if allow_writes {
-        command.arg("--allow-writes");
-    }
-    let mut child = command
+fn helper(input: &[u8]) -> std::process::Output {
+    let mut child = Command::new(env!("CARGO_BIN_EXE_razer-hid-helper"))
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -18,6 +14,18 @@ fn helper(input: &[u8], allow_writes: bool) -> std::process::Output {
 
 #[test]
 fn malformed_requests_and_raw_writes_are_rejected_before_hid_access() {
+    for allow_writes in [false, true] {
+        assert!(!razer_hid_helper::allowed_command(
+            [2, 7, 3],
+            &[0, 1],
+            allow_writes
+        ));
+        assert!(!razer_hid_helper::allowed_command(
+            [37, 11, 19],
+            &[],
+            allow_writes
+        ));
+    }
     let output = helper(
         concat!(
             "{\"action\":\"shell\",\"command\":\"anything\"}\n",
@@ -27,7 +35,6 @@ fn malformed_requests_and_raw_writes_are_rejected_before_hid_access() {
             "{\"action\":\"exchange\",\"command\":[256,0,133],\"data\":[]}\n"
         )
         .as_bytes(),
-        true,
     );
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).unwrap();
@@ -43,15 +50,12 @@ fn malformed_requests_and_raw_writes_are_rejected_before_hid_access() {
 }
 
 #[test]
-fn feature_writes_require_explicit_opt_in_and_input_is_bounded() {
-    let output = helper(
-        b"{\"action\":\"exchange\",\"command\":[2,7,3],\"data\":[0,60]}\n",
-        false,
-    );
+fn raw_feature_writes_are_readonly_and_input_is_bounded() {
+    let output = helper(b"{\"action\":\"exchange\",\"command\":[2,7,3],\"data\":[0,60]}\n");
     assert!(String::from_utf8(output.stdout)
         .unwrap()
         .contains("read-only"));
-    let output = helper(&vec![b' '; 16385], false);
+    let output = helper(&vec![b' '; 16385]);
     assert!(!output.status.success());
     assert!(output.stdout.is_empty());
 }

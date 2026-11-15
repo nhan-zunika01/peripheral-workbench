@@ -84,7 +84,11 @@ export function createBridge({ origin, token, backend, port = 17321 }) {
         res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
         res.writeHead(204); res.end(); return;
       }
-      if (req.method === 'GET' && req.url === '/api/pair') { res.setHeader('X-Razer-Companion-Backend', 'legacy'); reply(200, { token }); return; }
+      if (req.method === 'GET' && req.url === '/api/pair') {
+        res.setHeader('X-Razer-Companion-Backend', 'legacy');
+        if (backend.writes === false) res.setHeader('X-Razer-Companion-Writes', '0');
+        reply(200, { token }); return;
+      }
       const credential = String(req.headers.authorization || '');
       const expected = `Bearer ${token}`;
       if (Buffer.byteLength(credential) !== Buffer.byteLength(expected) || !timingSafeEqual(Buffer.from(credential), Buffer.from(expected))) throw failure(401, 'Incorrect pairing token');

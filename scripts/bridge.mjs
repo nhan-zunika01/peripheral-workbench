@@ -16,6 +16,7 @@ export function resolveCompanionConfig({ env = process.env, args = [], defaults 
   const backend = env.RAZER_COMPANION_BACKEND ?? defaults.backend;
   if (!['legacy', 'rust'].includes(backend)) throw new Error('RAZER_COMPANION_BACKEND must be legacy or rust');
   if (env.RAZER_COMPANION_WRITES !== undefined && !['0', '1'].includes(env.RAZER_COMPANION_WRITES)) throw new Error('RAZER_COMPANION_WRITES must be 0 or 1');
+  if (backend === 'rust' && env.RAZER_COMPANION_WRITES === '1') throw new Error('Production companion is read-only; hardware writes are unverified');
   const writes = backend === 'rust' && (env.RAZER_COMPANION_WRITES === undefined ? defaults.writes : env.RAZER_COMPANION_WRITES === '1');
   let executable = process.execPath;
   let command = [join(root, 'bridge/server.mjs'), '--origin', origin];
@@ -35,6 +36,7 @@ export async function probeCompanion({ origin, backend, writes, url = 'http://12
   try {
     const response = await fetcher(url, { headers: { Origin: origin }, signal: AbortSignal.timeout(1500) });
     if (!response.ok || response.headers?.get('X-Razer-Companion-Backend') !== backend) return 'conflict';
+    if (backend === 'legacy' && response.headers.get('X-Razer-Companion-Writes') !== '0') return 'conflict';
     if (backend === 'rust' && response.headers.get('X-Razer-Companion-Writes') !== (writes ? '1' : '0')) return 'conflict';
     const data = await response.json();
     return /^[a-f0-9]{64}$/.test(data.token) ? 'ready' : 'conflict';

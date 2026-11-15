@@ -30,8 +30,39 @@ test('Rust reuse requires the same explicit write mode and a present backend mar
   ]) assert.equal(await probe('http://fixture/api/pair', 'https://mouse.example', pair(backend, writes), { backend: 'rust', writes: requested }), expected);
 });
 
+test('legacy reuse rejects stale or writable listeners and accepts only an explicit read-only marker', async () => {
+  for (const [writes, expected] of [[undefined, 'conflict'], ['1', 'conflict'], ['0', 'ready']]) {
+    const fetcher = async () => ({ ok: true,
+      headers: new Headers({ 'X-Razer-Companion-Backend': 'legacy', ...(writes === undefined ? {} : { 'X-Razer-Companion-Writes': writes }) }),
+      json: async () => ({ token: 'a'.repeat(64) })
+    });
+    assert.equal(await probe('http://fixture/api/pair', 'https://mouse.example', fetcher), expected, `start marker ${writes}`);
+    assert.equal(await launcher.probeCompanion({ origin: 'https://mouse.example', backend: 'legacy', writes: false }, fetcher), expected, `bridge marker ${writes}`);
+  }
+});
+
+for (const caller of ['start', 'bridge']) test(`${caller} refuses production write opt-in before probing or spawning an older Rust companion`, async () => {
+  let probes = 0, spawned = 0;
+  const options = {
+    env: { RAZER_COMPANION_BACKEND: 'rust', RAZER_COMPANION_WRITES: '1', RAZER_COMPANION_EXE: process.execPath },
+    runtime: new EventEmitter(),
+    fetcher: async url => {
+      probes++;
+      return url.endsWith('/api/info') ? { ok: true, json: async () => ({ app: 'razer-device-control' }) } : pair('rust', '1')();
+    },
+    spawnChild() { spawned++; return new FakeChild(); }
+  };
+  let failure;
+  try { await (caller === 'start' ? start(options) : launcher.runBridge(options)); }
+  catch (error) { failure = error; }
+  assert.equal(probes, 0, 'unsafe configuration must fail before an old listener is contacted');
+  assert.equal(spawned, 0);
+  assert.match(failure?.message || '', /read-only|unverified/i);
+});
+
 test('legacy pairing announces its backend without dispatching device work', async () => {
   const server = createBridge({ origin: 'https://mouse.example', token: 'a'.repeat(64), port: 0, backend: {
+    writes: false,
     snapshot() { assert.fail('pair must not enumerate'); }, apply() { assert.fail('pair must not write'); }
   } });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
@@ -42,14 +73,14 @@ test('legacy pairing announces its backend without dispatching device work', asy
   } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
 });
 
-test('shared selector preserves legacy default and explicit Rust read-only or approved-write argv', () => {
+test('shared selector preserves production read-only and synthetic promoted defaults', () => {
   const resolve = options => launcher.resolveCompanionConfig?.(options);
   const legacy = resolve({ env: { RAZER_TRANSPORT: 'rust', RAZER_RUST_ALLOW_WRITES: '1' } });
   assert.equal(legacy?.backend, 'legacy');
   assert.equal(legacy.writes, false);
   assert.equal(legacy.executable, process.execPath);
   assert.match(legacy.args[0], /bridge[\\/]server\.mjs$/);
-  for (const [value, writes, flag] of [[undefined, false, '--read-only'], ['0', false, '--read-only'], ['1', true, '--allow-writes']]) {
+  for (const [value, writes, flag] of [[undefined, false, '--read-only'], ['0', false, '--read-only']]) {
     const config = resolve({ env: { RAZER_COMPANION_BACKEND: 'rust', RAZER_COMPANION_EXE: process.execPath, ...(value === undefined ? {} : { RAZER_COMPANION_WRITES: value }) }, args: ['--origin', 'https://mouse.example'] });
     assert.equal(config.backend, 'rust'); assert.equal(config.writes, writes);
     assert.equal(config.executable, process.execPath);
@@ -65,6 +96,7 @@ test('shared selector preserves legacy default and explicit Rust read-only or ap
 test('selector rejects invalid configuration before starting any process and never falls back', () => {
   for (const env of [
     { RAZER_COMPANION_BACKEND: 'other' }, { RAZER_COMPANION_WRITES: 'true' },
+    { RAZER_COMPANION_BACKEND: 'rust', RAZER_COMPANION_WRITES: '1', RAZER_COMPANION_EXE: process.execPath },
     { RAZER_COMPANION_BACKEND: 'rust', RAZER_COMPANION_EXE: 'relative.exe' },
     { RAZER_COMPANION_BACKEND: 'rust', RAZER_COMPANION_EXE: `${process.execPath}.missing` },
     { RAZER_COMPANION_BACKEND: 'rust', RAZER_COMPANION_EXE: process.execPath, SYNAPSE_INSPECTOR_URL: '' },
@@ -160,9 +192,9 @@ test('both commands forward the selected legacy, explicit Rust and future promot
   try {
     for (const command of ['start', 'bridge']) for (const mode of ['legacy', 'rust', 'promoted', 'promoted-read-only']) {
       const runtime = new EventEmitter(), child = new FakeChild(), calls = []; let pairs = 0;
-      const rust = mode !== 'legacy', writes = rust && mode !== 'promoted-read-only';
+      const rust = mode !== 'legacy', writes = mode === 'promoted';
       const options = {
-        env: { LOCALAPPDATA: appData, RAZER_COMPANION_EXE: process.execPath, ...(mode.startsWith('promoted') ? {} : { RAZER_COMPANION_BACKEND: mode }), ...(mode === 'rust' ? { RAZER_COMPANION_WRITES: '1' } : {}), ...(mode === 'promoted-read-only' ? { RAZER_COMPANION_WRITES: '0' } : {}) },
+        env: { LOCALAPPDATA: appData, RAZER_COMPANION_EXE: process.execPath, ...(mode.startsWith('promoted') ? {} : { RAZER_COMPANION_BACKEND: mode }), ...(mode === 'promoted-read-only' ? { RAZER_COMPANION_WRITES: '0' } : {}) },
         args: ['--origin', 'https://mouse.example'], defaults: mode.startsWith('promoted') ? { backend: 'rust', writes: true } : undefined, runtime,
         fetcher: async (url, request) => {
           if (url.endsWith('/api/info')) return { ok: true, json: async () => ({ app: 'razer-device-control' }) };

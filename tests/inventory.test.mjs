@@ -17,7 +17,7 @@ test('container grouping includes HID, USB and audio; preserves distinct physica
   assert.match(devices.find(device => device.containerId === 'container-c').reason, /no verified settings adapter/);
   assert.equal(new Set(devices.map(device => device.id)).size, 3);
 });
-test('selected device cannot fall back to another identical unit and apply rechecks inventory', async () => {
+test('selected device cannot fall back to another identical unit and read-only apply never probes', async () => {
   let attached = [a, b]; const calls = [];
   const backend = createBackend({ inspector: '', pnp: async () => [], native: async request => {
     calls.push(request); return request.action === 'enumerate' ? { devices: attached } : request.action === 'snapshot' ? { connected: true, settings: [] } : { verified: true };
@@ -28,7 +28,9 @@ test('selected device cannot fall back to another identical unit and apply reche
   attached = [b];
   const missing = await backend.snapshot(selected);
   assert.equal(missing.connected, false); assert.equal(missing.selectedDeviceId, selected);
-  await assert.rejects(backend.apply(selected, 'dpi', 800), /no longer attached/);
+  const beforeApply = calls.length;
+  await assert.rejects(backend.apply(selected, 'dpi', 800), /read-only/);
+  assert.equal(calls.length, beforeApply);
   assert.equal(calls.some(call => call.action === 'apply'), false);
 });
 test('session mode refuses controls without a physical binding and unsupported products never probe', async () => {
@@ -41,13 +43,13 @@ test('session mode refuses controls without a physical binding and unsupported p
   const unsupported = createBackend({ inspector: '', pnp: async () => [], native: async request => { unknownCalls.push(request.action); return { devices: [unknown] }; } });
   const detected = await unsupported.snapshot();
   assert.equal(detected.devices.length, 1); assert.equal(detected.settings.length, 0);
-  await assert.rejects(unsupported.apply(detected.selectedDeviceId, 'dpi', 800), /No verified adapter/);
-  assert.deepEqual(unknownCalls, ['enumerate', 'enumerate']);
+  await assert.rejects(unsupported.apply(detected.selectedDeviceId, 'dpi', 800), /read-only/);
+  assert.deepEqual(unknownCalls, ['enumerate']);
 });
 test('launcher checks app identity, exact-origin pairing and failed readiness', async () => {
   assert.equal(await probe('http://local/api/info', null, async () => ({ ok: true, json: async () => ({ app: 'other' }) })), 'conflict');
   assert.equal(await probe('http://local/api/info', null, async () => ({ ok: true, json: async () => ({ app: 'razer-device-control' }) })), 'ready');
-  assert.equal(await probe('http://local/api/pair', 'https://ui', async (_, options) => { assert.equal(options.headers.Origin, 'https://ui'); return { ok: true, headers: new Headers({ 'X-Razer-Companion-Backend': 'legacy' }), json: async () => ({ token: 'a'.repeat(64) }) }; }), 'ready');
+  assert.equal(await probe('http://local/api/pair', 'https://ui', async (_, options) => { assert.equal(options.headers.Origin, 'https://ui'); return { ok: true, headers: new Headers({ 'X-Razer-Companion-Backend': 'legacy', 'X-Razer-Companion-Writes': '0' }), json: async () => ({ token: 'a'.repeat(64) }) }; }), 'ready');
   assert.equal(await probe('http://local', null, async () => { throw Object.assign(new Error(), { cause: { code: 'ECONNREFUSED' } }); }), 'absent');
   await assert.rejects(waitReady(async () => 'ready', { exitCode: 1 }), /exited/);
 });

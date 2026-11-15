@@ -45,7 +45,9 @@ impl<L> PhysicalBackend<WorkerRunner, L> {
     ) -> Result<Self, ApiError> {
         let allow_writes = allow_writes && session.record().parent_allow_writes;
         let (attachment, signal) = AttachmentGuard::new();
-        let listener = match register(signal) {
+        let registration =
+            crate::ensure_production_read_only(allow_writes).and_then(|_| register(signal));
+        let listener = match registration {
             Ok(listener) => listener,
             Err(error) => {
                 if session.record().phase == "starting"
@@ -57,7 +59,11 @@ impl<L> PhysicalBackend<WorkerRunner, L> {
                         ApiError::internal(format!("{error}; guard cleanup failed: {cleanup}"))
                     })?;
                 }
-                return Err(ApiError::internal(error));
+                return Err(if allow_writes {
+                    ApiError::new(400, error)
+                } else {
+                    ApiError::internal(error)
+                });
             }
         };
         Ok(Self {

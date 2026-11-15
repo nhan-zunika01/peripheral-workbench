@@ -8,6 +8,7 @@ import { rustRequest } from './rust-transport.mjs';
 const engine = 'C:\\Program Files\\Razer\\RazerAppEngine\\app-4.0.896\\RazerAppEngine.exe';
 const helper = fileURLToPath(new URL('./native-host.cjs', import.meta.url));
 export function nativeRequest(request) {
+  if (request.action === 'apply') return Promise.reject(Object.assign(new Error('Legacy transport is read-only; hardware writes have not been verified'), { status: 400 }));
   const transport = process.env.RAZER_TRANSPORT || 'native';
   if (transport === 'rust') return rustRequest(request);
   if (transport !== 'native') return Promise.reject(new Error('RAZER_TRANSPORT must be native or rust'));
@@ -41,6 +42,7 @@ export function createBackend({ native = nativeRequest, pnp = windowsInventory, 
   }
   const publicDevices = devices => devices.map(({ interfaces, endpoints, ...device }) => ({ ...device, interfaceCount: interfaces.length + endpoints.length }));
   return {
+    writes: false,
     async snapshot(deviceId) {
       const { devices, selected, selectedDeviceId, warnings } = await resolve(deviceId);
       const common = { devices: publicDevices(devices), selectedDeviceId, settings: [], unavailable: warnings };
@@ -48,14 +50,12 @@ export function createBackend({ native = nativeRequest, pnp = windowsInventory, 
       if (!selected.supported) return { ...common, connected: false, model: selected.name, message: selected.reason };
       if (inspector) return { ...common, connected: false, model: selected.name, message: 'Synapse session controls are disabled: its product page cannot be bound to this selected physical device. Start the companion without SYNAPSE_INSPECTOR_URL for verified native controls.' };
       try {
-        return { ...common, ...await native({ action: 'snapshot', deviceId: selected.id, target: selected.interfaces.map(item => item.path) }), devices: common.devices, selectedDeviceId };
+        const state = await native({ action: 'snapshot', deviceId: selected.id, target: selected.interfaces.map(item => item.path) });
+        return { ...common, ...state, settings: state.settings.map(setting => ({ ...setting, writable: false })), devices: common.devices, selectedDeviceId };
       } catch (error) { return { ...common, connected: false, model: selected.name, message: error.message }; }
     },
-    async apply(deviceId, id, value) {
-      const { selected } = await resolve(deviceId);
-      if (!deviceId || !selected) throw Object.assign(new Error('Selected device is no longer attached'), { status: 409 });
-      if (!selected.supported || inspector) throw Object.assign(new Error('No verified adapter bound to this physical device'), { status: 400 });
-      return native({ action: 'apply', deviceId: selected.id, target: selected.interfaces.map(item => item.path), change: { id, value } });
+    async apply() {
+      throw Object.assign(new Error('Legacy transport is read-only; hardware writes have not been verified'), { status: 400 });
     }
   };
 }

@@ -1,11 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createTransport } from '../public/transport.js';
+import { createTransport as createHistoricalTransport } from './fixtures/legacy-source/public/transport.js';
 import { createStore } from '../public/state.js';
 
-function companion() {
+function companion(factory = createTransport) {
   const calls = [], controls = { offline: false, rotate: false, hold: null, writeError: false };
-  const transport = createTransport(async (url, options) => {
+  const transport = factory(async (url, options) => {
     const path = new URL(url).pathname; calls.push({ path, url, options });
     if (controls.offline) throw new TypeError('Offline');
     if (controls.hold) await controls.hold;
@@ -27,7 +28,7 @@ test('automatic reads pair, renew expired tokens, retain physical identity and n
   assert.equal(p.calls.at(-1).options.targetAddressSpace, 'loopback');
 });
 test('pending reads and Apply exclude overlapping polls; hidden tabs do not poll', async () => {
-  const p = companion(); await p.transport.read('b');
+  const p = companion(createHistoricalTransport); await p.transport.read('b');
   let release; p.controls.hold = new Promise(resolve => { release = resolve; });
   const pending = p.transport.read('b'); const count = p.calls.length;
   assert.equal(await p.transport.poll('b', false), null); assert.equal(p.calls.length, count);
@@ -39,13 +40,13 @@ test('pending reads and Apply exclude overlapping polls; hidden tabs do not poll
   assert.deepEqual(JSON.parse(p.calls.at(-1).options.body), { deviceId: 'b', id: 'dpi', value: { x: 1200, y: 1200 } });
 });
 test('network write failure never retries a potentially executed command', async () => {
-  const p = companion(); await p.transport.read('b'); p.controls.writeError = true;
+  const p = companion(createHistoricalTransport); await p.transport.read('b'); p.controls.writeError = true;
   await assert.rejects(p.transport.apply('b', 'dpi', 1600), { name: 'TimeoutError' });
   assert.equal(p.calls.filter(c => c.path === '/api/settings').length, 1); assert.equal(p.transport.busy, false);
 });
 test('review writes carry the exact expected value, including null, and expose conflicts', async () => {
   const calls = [];
-  const transport = createTransport(async (url, options) => {
+  const transport = createHistoricalTransport(async (url, options) => {
     const path = new URL(url).pathname; calls.push({ path, options });
     return path === '/api/pair'
       ? { ok: true, status: 200, json: async () => ({ token: 'a'.repeat(64) }) }

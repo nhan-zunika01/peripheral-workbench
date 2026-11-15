@@ -91,6 +91,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if !args.is_empty() && !allow_writes {
         return Err("Usage: razer-hid-helper [--allow-writes]".into());
     }
+    razer_hid_helper::ensure_production_read_only(allow_writes)?;
     let mut input = io::stdin().lock();
     let mut output = io::stdout().lock();
     let mut device = None;

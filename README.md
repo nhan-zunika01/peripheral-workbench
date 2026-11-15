@@ -17,6 +17,10 @@ Keep the terminal open. The launcher starts the interface and companion, then op
 
 [Setup and deployment](docs/setup.md) covers exact-origin pairing, the experimental Rust transport and troubleshooting. Hardware setting writes have not been verified on a physical device; automated tests use fake transports.
 
+M0 locks production companions to read-only. Legacy write variables cannot enable setters, and Rust rejects an effective `--allow-writes` request until model, firmware and setting evidence exists. Update and restart an older companion before connecting the website. The [baseline](docs/quality/baseline.md) records validation limits; the [rights inventory](docs/legal/status.md) records the unresolved license decisions.
+
+The hosted transport also rejects Apply and exposes read-only settings when connected to an older companion. Reload existing browser tabs after upgrading. [M0 validation](docs/quality/m0-validation.json) records the three regression rounds and cumulative checks.
+
 ## Verify
 
 ```powershell
@@ -31,6 +35,8 @@ cargo test --locked --manifest-path bridge/rust/Cargo.toml
 ```
 
 ## Repository contents
+
+The [project review](docs/audits/2026-11-13-project-audit.md), [roadmap](docs/roadmap.md), and [implementation plan](docs/superpowers/plans/2026-11-13-stability-open-source.md) document the stability, performance and open-source release work identified on 2026-11-13. These planning documents are in Vietnamese; they do not establish hardware verification or select a project license.
 
 `public/` contains the interface, `src/` the Worker, `bridge/` the local companion, and `tests/` the automated checks and synthetic fixtures.
 

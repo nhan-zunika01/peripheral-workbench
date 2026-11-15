@@ -52,19 +52,23 @@ test('experimental Rust snapshots are read-only and terminate before releasing o
   assert.deepEqual(fake.commands.filter(command => command.action === 'open').map(command => command.path), ['unit-a']);
 });
 
-test('Rust apply requires explicit opt-in, fails once, and holds failure until process closes', async () => {
+test('Rust apply stays read-only with the former explicit opt-in', async () => {
   let spawned = 0;
   await assert.rejects(rustRequest({ ...request, action: 'apply' }, { executable, spawnHelper: () => { spawned++; } }), /read-only/);
+  await assert.rejects(rustRequest({ ...request, action: 'apply' }, { executable, allowWrites: true, spawnHelper: () => { spawned++; throw new Error('must not spawn'); } }), /read-only/);
   assert.equal(spawned, 0);
   await assert.rejects(rustRequest(request, { executable: 'relative.exe' }), /absolute path/);
+});
+
+test('Rust snapshot failure holds the operation until the helper process closes', async () => {
   const fake = fakeHelper({ deferClose: true });
-  const pending = rustRequest({ ...request, action: 'apply', change: { id: 'dpi', value: { x: 800, y: 800 } } }, { executable, allowWrites: true, spawnHelper: fake.spawnHelper });
+  const pending = rustRequest({ ...request, target: ['missing'] }, { executable, spawnHelper: fake.spawnHelper });
   let settled = false; pending.catch(() => { settled = true; });
   while (!fake.child.killed) await new Promise(resolve => setImmediate(resolve));
   assert.equal(settled, false);
   fake.child.emit('close', null);
-  await assert.rejects(pending, /Unavailable getter/);
-  assert.equal(fake.commands.filter(value => value.action === 'exchange' && value.command[2] === 5).length, 1);
+  await assert.rejects(pending, /no longer attached/);
+  assert.equal(fake.commands.filter(value => value.action === 'exchange').length, 0);
 });
 
 test('shared native adapter rejects stale targets, PID/interface mismatch and short payloads', async () => {

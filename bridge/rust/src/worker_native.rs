@@ -102,6 +102,8 @@ pub fn execute(
     }
 }
 fn dispatch_native(request: WorkerRequest, argv_allow_writes: bool) -> Result<Value, ApiError> {
+    crate::ensure_production_read_only(argv_allow_writes)
+        .map_err(|error| ApiError::new(400, error))?;
     #[cfg(windows)]
     {
         use crate::windows_inventory::WindowsInventory;
@@ -198,4 +200,30 @@ pub fn run(allow_writes: bool) -> io::Result<()> {
         &serde_json::to_vec(&response).map_err(io::Error::other)?,
         limit,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn native_dispatch_rejects_write_mode_before_opening_target() {
+        let request = crate::worker::WorkerRequest::Inspect {
+            target: crate::inventory::Device {
+                id: "a".repeat(24),
+                name: "unsupported fixture".into(),
+                container_id: None,
+                interfaces: vec![],
+                endpoints: vec![],
+                supported: false,
+                reason: None,
+            },
+            tickets: vec![],
+            change: None,
+            allow_writes: true,
+        };
+        let error = super::dispatch_native(request, true).unwrap_err();
+        assert_eq!(error.status, 400);
+        assert!(error
+            .error
+            .contains("no verified model/firmware/setting evidence"));
+    }
 }

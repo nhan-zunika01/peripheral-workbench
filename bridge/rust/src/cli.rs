@@ -89,6 +89,7 @@ pub async fn run(options: Options) -> Result<(), Box<dyn std::error::Error>> {
         recovery::{self, ReadPlan},
         session_guard::sentinel_path,
     };
+    crate::ensure_production_read_only(options.allow_writes)?;
     validate_environment(std::env::var("SYNAPSE_INSPECTOR_URL").ok().as_deref())?;
     if options.internal {
         crate::worker_native::run(options.allow_writes)?;

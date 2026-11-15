@@ -16,6 +16,13 @@ if (existingEntry) throw new Error(`QA_OUTPUT ${output}/${existingEntry} already
 await mkdir(output, { recursive: true });
 const receipt = async () => Object.fromEntries(await Promise.all(['app.js', 'state.js', 'views.js', 'editors.js', 'macros.js', 'macro-view.js', 'review.js', 'project-views.js', 'i18n.js', 'style.css', 'index.html'].map(async file => [file, createHash('sha256').update(await readFile(resolve(source, 'public', file))).digest('hex')])));
 const sourceReceipts = await receipt();
+const servedTransportPath = resolve(source, 'tests/fixtures/legacy-source/public/transport.js');
+const transportReceipt = async () => ({
+  transportMode: 'historical-mock', servedTransportPath,
+  servedTransportSha256: createHash('sha256').update(await readFile(servedTransportPath)).digest('hex'),
+  productionTransportSha256: createHash('sha256').update(await readFile(resolve(source, 'public/transport.js'))).digest('hex')
+});
+const transportReceipts = await transportReceipt();
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext({ acceptDownloads: true });
 const page = await context.newPage();
@@ -35,7 +42,7 @@ let snapshot = initialSnapshot, failSetting = '', conflictSetting = '', conflict
 page.on('pageerror', error => errors.push(error.stack || error.message));
 await context.route('http://qa.local/**', async route => {
   const pathname = new URL(route.request().url()).pathname;
-  const file = resolve(source, 'public', `.${pathname === '/' ? '/index.html' : pathname}`);
+  const file = pathname === '/transport.js' ? servedTransportPath : resolve(source, 'public', `.${pathname === '/' ? '/index.html' : pathname}`);
   const mime = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.webp': 'image/webp' }[extname(file)] || 'application/octet-stream';
   try { await route.fulfill({ body: await readFile(file), contentType: mime }); }
   catch { await route.fulfill({ status: 404, body: '' }); }
@@ -385,11 +392,12 @@ try {
     assert.deepEqual(errors, []);
   });
   assert.deepEqual(await receipt(), sourceReceipts, 'Source changed during acceptance; rerun the stable candidate');
-  await writeFile(resolve(output, 'report.json'), JSON.stringify({ source, sourceReceipts, checks, failures, screenshots, writes: writes.map(({ deviceId, id }) => ({ deviceId, id })), reads, concurrentWrite, pageErrors: errors }, null, 2));
+  assert.deepEqual(await transportReceipt(), transportReceipts, 'Transport changed during acceptance; rerun the stable candidate');
+  await writeFile(resolve(output, 'report.json'), JSON.stringify({ source, sourceReceipts, ...transportReceipts, checks, failures, screenshots, writes: writes.map(({ deviceId, id }) => ({ deviceId, id })), reads, concurrentWrite, pageErrors: errors }, null, 2));
   assert.deepEqual(failures, [], 'Browser acceptance has failing scenarios');
   process.stdout.write(`PASS ${checks.length} independent checks, ${screenshots.length} screenshots; all companion responses mocked\n`);
 } catch (error) {
   await capture('failure.png');
-  await writeFile(resolve(output, 'failure.json'), JSON.stringify({ source, sourceReceipts, checks, writes, reads, pageErrors: errors, error: error.stack, body: await page.locator('body').innerText() }, null, 2));
+  await writeFile(resolve(output, 'failure.json'), JSON.stringify({ source, sourceReceipts, ...transportReceipts, checks, writes, reads, pageErrors: errors, error: error.stack, body: await page.locator('body').innerText() }, null, 2));
   throw error;
 } finally { await browser.close(); }

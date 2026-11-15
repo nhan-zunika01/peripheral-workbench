@@ -23,10 +23,13 @@ export function createTransport(fetcher = globalThis.fetch) {
     busy = true;
     try { if (!token) await pair(); return await action(); } finally { busy = false; }
   }
-  const read = deviceId => operation(() => request(`/api/state${deviceId ? `?deviceId=${encodeURIComponent(deviceId)}` : ''}`));
+  const read = deviceId => operation(async () => {
+    const snapshot = await request(`/api/state${deviceId ? `?deviceId=${encodeURIComponent(deviceId)}` : ''}`);
+    return Array.isArray(snapshot?.settings) ? { ...snapshot, settings: snapshot.settings.map(setting => ({ ...setting, writable: false })) } : snapshot;
+  });
   return {
     get busy() { return busy; }, read,
     poll: (deviceId, hidden) => hidden || busy ? Promise.resolve(null) : read(deviceId),
-    apply: (...args) => { const [deviceId, id, value, expectedValue] = args; return operation(() => request('/api/settings', { deviceId, id, value, ...(args.length > 3 ? { expectedValue } : {}) })); }
+    apply: () => Promise.reject(new Error('Hosted transport is read-only'))
   };
 }

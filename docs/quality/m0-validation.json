@@ -1,0 +1,1295 @@
+{
+  "format": 1,
+  "kind": "m0-cumulative-local-validation",
+  "date": "2026-11-15",
+  "timezone": "Asia/Saigon",
+  "originalCommit": "3d0679cae96ce3dd561f0d2fa65ce55a5104c63a",
+  "sourceState": "Candidate working tree before publication; finalSource hashes identify tested runtime and test bytes.",
+  "rounds": [
+    {
+      "name": "GREEN0",
+      "receiptSha256": "63e6cc1fb0c781b4a9a200f6d4e8db5150c678202a8080426a7b8b061a804377",
+      "sourceFingerprint": "1e013a4407e051d59c961731675d3c3c4b8e452d358c6dfd7fd524099c08e39c",
+      "phases": [
+        {
+          "phase": "node-test",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-14T17:52:50.452572Z",
+          "seconds": 4.3918984,
+          "pass": 101,
+          "fail": 0,
+          "skip": 0,
+          "log": "node-test.log",
+          "sha256": "ac8d4bef713a38bfdec27fba246311d5c71cdc75e23b63dfd733649a29fc2480"
+        },
+        {
+          "phase": "cargo-test",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-14T17:52:54.8638079Z",
+          "seconds": 28.0238098,
+          "pass": 154,
+          "fail": 0,
+          "skip": 0,
+          "log": "cargo-test.log",
+          "sha256": "8f2e303c6550235a64e820bbd0832b05ee00ca0411754b03d91aae37ed853b99"
+        },
+        {
+          "phase": "cargo-fmt",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-14T17:53:22.8919725Z",
+          "seconds": 0.2478587,
+          "pass": 0,
+          "fail": 0,
+          "skip": 0,
+          "log": "cargo-fmt.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "phase": "cargo-clippy",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-14T17:53:23.1466228Z",
+          "seconds": 13.1013282,
+          "pass": 0,
+          "fail": 0,
+          "skip": 0,
+          "log": "cargo-clippy.log",
+          "sha256": "42c463d76aad91a58579cecc1e1b47f203b6c5fdf9f308e7f5f94e476a8a1898"
+        },
+        {
+          "phase": "cargo-release",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-14T17:53:36.2504037Z",
+          "seconds": 28.6875367,
+          "pass": 0,
+          "fail": 0,
+          "skip": 0,
+          "log": "cargo-release.log",
+          "sha256": "6ba3f36050e759276a4a5ee13c096c38c9979a91c37cdc59bfb2a6256fa7f6a7"
+        },
+        {
+          "phase": "contract-build",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-14T17:54:04.9407814Z",
+          "seconds": 0.125363,
+          "pass": 0,
+          "fail": 0,
+          "skip": 0,
+          "log": "contract-build.log",
+          "sha256": "fb97fd3ea5e818487b5b4a02fc9517991fa984eb83bf6a65ba27c1e5eaa29b6f"
+        },
+        {
+          "phase": "differential",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-14T17:54:05.1244Z",
+          "seconds": 0.4525646,
+          "pass": 0,
+          "fail": 0,
+          "skip": 0,
+          "log": "differential.log",
+          "sha256": "82272c2df8e3540c455a9b3a92ff14a852d805a3cd69d8dd4d30ec0fc5221c3c",
+          "cases": 134
+        },
+        {
+          "phase": "launcher",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-14T17:54:05.5792964Z",
+          "seconds": 0.2366608,
+          "pass": 0,
+          "fail": 0,
+          "skip": 0,
+          "log": "launcher.log",
+          "sha256": "d5717eae523cc6db86ea7ba351684ff6ae189be7d18e4dc9aff5522c412b1e78",
+          "cases": 4
+        },
+        {
+          "phase": "frontend-build",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-14T17:54:05.818542Z",
+          "seconds": 1.5787075,
+          "pass": 0,
+          "fail": 0,
+          "skip": 0,
+          "log": "frontend-build.log",
+          "sha256": "bff685b53acf2488af306387fe14a98f9fbe1598722a8876995e289721ca2568"
+        },
+        {
+          "phase": "project-qa",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-14T17:54:07.3998367Z",
+          "seconds": 12.6167323,
+          "pass": 0,
+          "fail": 0,
+          "skip": 0,
+          "log": "project-qa.log",
+          "sha256": "2a07b3bbfcda672aae3e4bf9ab42a299516d163620fb385defb74e6ca494be39",
+          "checks": 13,
+          "screenshots": 24,
+          "pageErrors": 0
+        },
+        {
+          "phase": "ui",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-14T17:54:20.1412113Z",
+          "seconds": 31.7981479,
+          "pass": 0,
+          "fail": 0,
+          "skip": 0,
+          "log": "ui.log",
+          "sha256": "bd8596556d107588777ba0b305029da8a715fcc9087d25bc975ee8aa148c328b",
+          "checks": 21,
+          "screenshots": 96,
+          "pageErrors": 0
+        },
+        {
+          "phase": "hardware-offline",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-14T17:54:51.9423327Z",
+          "seconds": 8.7309835,
+          "pass": 9,
+          "fail": 0,
+          "skip": 0,
+          "log": "hardware-offline.log",
+          "sha256": "7027dee308cd4d56f24a411e246704c81e4d6cac44c1c52ff109297472fadb02"
+        }
+      ]
+    },
+    {
+      "name": "GREEN1",
+      "receiptSha256": "c312569e4d72d59b26060eb50cb3afed032686a409bdf1977dd73254a8849c86",
+      "sourceFingerprint": "2dd20aa3d6adf79b85d156e8706c1c0b03decbc9f4a64cee634d4fd50ef66535",
+      "phases": [
+        {
+          "phase": "node-test",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-14T17:57:15.2305451Z",
+          "seconds": 4.1437249,
+          "pass": 102,
+          "fail": 0,
+          "skip": 0,
+          "log": "node-test.log",
+          "sha256": "80384be0b215f15078ff359442b9a37cea8a1e143a798c42c9c03a882b478be5"
+        },
+        {
+          "phase": "cargo-test",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-14T17:57:19.3982006Z",
+          "seconds": 8.1794095,
+          "pass": 154,
+          "fail": 0,
+          "skip": 0,
+          "log": "cargo-test.log",
+          "sha256": "95120d159ffbdc7b9567a73ade1a30f07d1521be6b4263660d3d650598793835"
+        },
+        {
+          "phase": "cargo-fmt",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-14T17:57:27.5803047Z",
+          "seconds": 0.2441406,
+          "pass": 0,
+          "fail": 0,
+          "skip": 0,
+          "log": "cargo-fmt.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "phase": "cargo-clippy",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-14T17:57:27.8347865Z",
+          "seconds": 0.2266007,
+          "pass": 0,
+          "fail": 0,
+          "skip": 0,
+          "log": "cargo-clippy.log",
+          "sha256": "52f9b17fb347a996475d657f25f62a33b21231ae32d6375da7d69aa57455232e"
+        },
+        {
+          "phase": "cargo-release",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-14T17:57:28.0643780Z",
+          "seconds": 0.1836699,
+          "pass": 0,
+          "fail": 0,
+          "skip": 0,
+          "log": "cargo-release.log",
+          "sha256": "f51c58630b0e03ffda8c69929d0eaa6148ea9e47b60c670f61e9ae7b0b434d9d"
+        },
+        {
+          "phase": "contract-build",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-14T17:57:28.2502579Z",
+          "seconds": 0.1234286,
+          "pass": 0,
+          "fail": 0,
+          "skip": 0,
+          "log": "contract-build.log",
+          "sha256": "4bfc535f26bd59e7532a4293fd7aab5272c201980382ee35a0f8770f83822aac"
+        },
+        {
+          "phase": "differential",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-14T17:57:28.4073933Z",
+          "seconds": 0.4542053,
+          "pass": 0,
+          "fail": 0,
+          "skip": 0,
+          "log": "differential.log",
+          "sha256": "82272c2df8e3540c455a9b3a92ff14a852d805a3cd69d8dd4d30ec0fc5221c3c",
+          "cases": 134
+        },
+        {
+          "phase": "launcher",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-14T17:57:28.8649529Z",
+          "seconds": 0.2636715,
+          "pass": 0,
+          "fail": 0,
+          "skip": 0,
+          "log": "launcher.log",
+          "sha256": "d5717eae523cc6db86ea7ba351684ff6ae189be7d18e4dc9aff5522c412b1e78",
+          "cases": 4
+        },
+        {
+          "phase": "frontend-build",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-14T17:57:29.1351535Z",
+          "seconds": 1.4114385,
+          "pass": 0,
+          "fail": 0,
+          "skip": 0,
+          "log": "frontend-build.log",
+          "sha256": "bff685b53acf2488af306387fe14a98f9fbe1598722a8876995e289721ca2568"
+        },
+        {
+          "phase": "project-qa",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-14T17:57:30.5498542Z",
+          "seconds": 13.8961666,
+          "pass": 0,
+          "fail": 0,
+          "skip": 0,
+          "log": "project-qa.log",
+          "sha256": "2a07b3bbfcda672aae3e4bf9ab42a299516d163620fb385defb74e6ca494be39",
+          "checks": 13,
+          "screenshots": 24,
+          "pageErrors": 0
+        },
+        {
+          "phase": "ui",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-14T17:57:44.6519342Z",
+          "seconds": 32.9077554,
+          "pass": 0,
+          "fail": 0,
+          "skip": 0,
+          "log": "ui.log",
+          "sha256": "bd8596556d107588777ba0b305029da8a715fcc9087d25bc975ee8aa148c328b",
+          "checks": 21,
+          "screenshots": 96,
+          "pageErrors": 0
+        },
+        {
+          "phase": "hardware-offline",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-14T17:58:17.5696148Z",
+          "seconds": 8.5655634,
+          "pass": 9,
+          "fail": 0,
+          "skip": 0,
+          "log": "hardware-offline.log",
+          "sha256": "2d191da2957de5df45d5edd38f77259a2ee42ec638a3e864157a37d8ba488c8f"
+        }
+      ]
+    },
+    {
+      "name": "GREEN2",
+      "receiptSha256": "e01dbf55d246164f95e74cade66e8f168d154ab04c28c795adc7addd84c3345a",
+      "sourceFingerprint": "1d0a616b52695aa67956bd68f78da2e9cca3b974ad7ffd0eb5a60e0d206cf2d5",
+      "phases": [
+        {
+          "phase": "node-test",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-14T18:01:06.1129670Z",
+          "seconds": 4.7117673,
+          "pass": 105,
+          "fail": 0,
+          "skip": 0,
+          "log": "node-test.log",
+          "sha256": "48c172d797ea2fa447f760a3853c2768192a67aa42c0b3d524cbbbf96b418c5a"
+        },
+        {
+          "phase": "cargo-test",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-14T18:01:10.8457311Z",
+          "seconds": 8.1246995,
+          "pass": 154,
+          "fail": 0,
+          "skip": 0,
+          "log": "cargo-test.log",
+          "sha256": "2675aec55dd830c66e615ff4ab332e57f08588776e3700e903366f5181236982"
+        },
+        {
+          "phase": "cargo-fmt",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-14T18:01:18.9730664Z",
+          "seconds": 0.2406371,
+          "pass": 0,
+          "fail": 0,
+          "skip": 0,
+          "log": "cargo-fmt.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "phase": "cargo-clippy",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-14T18:01:19.2156909Z",
+          "seconds": 0.2273204,
+          "pass": 0,
+          "fail": 0,
+          "skip": 0,
+          "log": "cargo-clippy.log",
+          "sha256": "4e5127f6763ee148417e66542e2c774041d5cb9ae6cc0a361f3249e7add60712"
+        },
+        {
+          "phase": "cargo-release",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-14T18:01:19.4465602Z",
+          "seconds": 0.1770367,
+          "pass": 0,
+          "fail": 0,
+          "skip": 0,
+          "log": "cargo-release.log",
+          "sha256": "97f7197cb8f69a7c1e35f1e96bea2a529f777ce255ddd0bfeff50975906a4a51"
+        },
+        {
+          "phase": "contract-build",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-14T18:01:19.6260102Z",
+          "seconds": 0.108783,
+          "pass": 0,
+          "fail": 0,
+          "skip": 0,
+          "log": "contract-build.log",
+          "sha256": "12445ac534bd8d28e0e62eae8aa350c49876b0923c9e5954cb39f886f72402b1"
+        },
+        {
+          "phase": "differential",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-14T18:01:19.7691288Z",
+          "seconds": 0.4342536,
+          "pass": 0,
+          "fail": 0,
+          "skip": 0,
+          "log": "differential.log",
+          "sha256": "82272c2df8e3540c455a9b3a92ff14a852d805a3cd69d8dd4d30ec0fc5221c3c",
+          "cases": 134
+        },
+        {
+          "phase": "launcher",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-14T18:01:20.2074008Z",
+          "seconds": 0.2639783,
+          "pass": 0,
+          "fail": 0,
+          "skip": 0,
+          "log": "launcher.log",
+          "sha256": "d5717eae523cc6db86ea7ba351684ff6ae189be7d18e4dc9aff5522c412b1e78",
+          "cases": 4
+        },
+        {
+          "phase": "frontend-build",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-14T18:01:20.4751279Z",
+          "seconds": 1.2849516,
+          "pass": 0,
+          "fail": 0,
+          "skip": 0,
+          "log": "frontend-build.log",
+          "sha256": "bff685b53acf2488af306387fe14a98f9fbe1598722a8876995e289721ca2568"
+        },
+        {
+          "phase": "project-qa",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-14T18:01:21.7634456Z",
+          "seconds": 14.0441228,
+          "pass": 0,
+          "fail": 0,
+          "skip": 0,
+          "log": "project-qa.log",
+          "sha256": "2a07b3bbfcda672aae3e4bf9ab42a299516d163620fb385defb74e6ca494be39",
+          "checks": 13,
+          "screenshots": 24,
+          "pageErrors": 0
+        },
+        {
+          "phase": "ui",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-14T18:01:36.0113440Z",
+          "seconds": 32.0470866,
+          "pass": 0,
+          "fail": 0,
+          "skip": 0,
+          "log": "ui.log",
+          "sha256": "bd8596556d107588777ba0b305029da8a715fcc9087d25bc975ee8aa148c328b",
+          "checks": 21,
+          "screenshots": 96,
+          "pageErrors": 0
+        },
+        {
+          "phase": "hardware-offline",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-14T18:02:08.0625575Z",
+          "seconds": 8.6068153,
+          "pass": 9,
+          "fail": 0,
+          "skip": 0,
+          "log": "hardware-offline.log",
+          "sha256": "259e731046436b4fff8c3d0b8f0f0fe92f652c16708c9c3aa0ef38157d7c0959"
+        }
+      ]
+    },
+    {
+      "name": "GREEN3",
+      "receiptSha256": "84a6522fca6896a9ae3c2ad81d35dc28006ca2aac3f0e7ba4ed70b6bd318c96d",
+      "sourceFingerprint": "09f784b9ec25d193861463c7f98ee28a54eb51f05bc887a86e3e3f2de40c84d1",
+      "phases": [
+        {
+          "phase": "node-test",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-15T05:56:53.8654580Z",
+          "seconds": 4.4851896,
+          "pass": 111,
+          "fail": 0,
+          "skip": 0,
+          "log": "node-test.log",
+          "sha256": "1057be2628bca98f50f6f4dffff6c917f38a926ad24875783b22e8f39c25194e"
+        },
+        {
+          "phase": "cargo-test",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-15T05:56:58.3625840Z",
+          "seconds": 37.4047473,
+          "pass": 154,
+          "fail": 0,
+          "skip": 0,
+          "log": "cargo-test.log",
+          "sha256": "f1b3f299ebcf73601bb0d98af451b74d3482687c7e5ab72d03275ff273566bf2"
+        },
+        {
+          "phase": "cargo-fmt",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-15T05:57:35.7700428Z",
+          "seconds": 0.5504399,
+          "pass": 0,
+          "fail": 0,
+          "skip": 0,
+          "log": "cargo-fmt.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "phase": "cargo-clippy",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-15T05:57:36.3224656Z",
+          "seconds": 3.6644352,
+          "pass": 0,
+          "fail": 0,
+          "skip": 0,
+          "log": "cargo-clippy.log",
+          "sha256": "d215459287032f80dc852c6e133bdf3ebca04cbbc49e671091c43254155933ae"
+        },
+        {
+          "phase": "cargo-release",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-15T05:57:39.9894360Z",
+          "seconds": 13.3825396,
+          "pass": 0,
+          "fail": 0,
+          "skip": 0,
+          "log": "cargo-release.log",
+          "sha256": "a8085268142c799bf5ebcdac578a8480140579ec03037f8de9da7a5ccb1388f4"
+        },
+        {
+          "phase": "contract-build",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-15T05:57:53.3740460Z",
+          "seconds": 0.1184102,
+          "pass": 0,
+          "fail": 0,
+          "skip": 0,
+          "log": "contract-build.log",
+          "sha256": "573499e9e6bf60247caed88be0069213752e1ec5361f2399d63429e06273fa94"
+        },
+        {
+          "phase": "differential",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-15T05:57:53.5214884Z",
+          "seconds": 0.5415035,
+          "pass": 0,
+          "fail": 0,
+          "skip": 0,
+          "log": "differential.log",
+          "sha256": "82272c2df8e3540c455a9b3a92ff14a852d805a3cd69d8dd4d30ec0fc5221c3c",
+          "cases": 134
+        },
+        {
+          "phase": "launcher",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-15T05:57:54.0662140Z",
+          "seconds": 0.2987559,
+          "pass": 0,
+          "fail": 0,
+          "skip": 0,
+          "log": "launcher.log",
+          "sha256": "d5717eae523cc6db86ea7ba351684ff6ae189be7d18e4dc9aff5522c412b1e78",
+          "cases": 4
+        },
+        {
+          "phase": "frontend-build",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-15T05:57:54.3687455Z",
+          "seconds": 4.5088615,
+          "pass": 0,
+          "fail": 0,
+          "skip": 0,
+          "log": "frontend-build.log",
+          "sha256": "67f05b77501761b913b7c7a74c5ebd017f1b132c616ab48a880a90395886f302"
+        },
+        {
+          "phase": "project-qa",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-15T05:57:58.8795228Z",
+          "seconds": 12.0503993,
+          "pass": 0,
+          "fail": 0,
+          "skip": 0,
+          "log": "project-qa.log",
+          "sha256": "2a07b3bbfcda672aae3e4bf9ab42a299516d163620fb385defb74e6ca494be39",
+          "checks": 13,
+          "screenshots": 24,
+          "pageErrors": 0
+        },
+        {
+          "phase": "ui",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-15T05:58:11.1020558Z",
+          "seconds": 28.7041979,
+          "pass": 0,
+          "fail": 0,
+          "skip": 0,
+          "log": "ui.log",
+          "sha256": "bd8596556d107588777ba0b305029da8a715fcc9087d25bc975ee8aa148c328b",
+          "checks": 21,
+          "screenshots": 96,
+          "pageErrors": 0
+        },
+        {
+          "phase": "hardware-offline",
+          "exitCode": 0,
+          "status": "PASS",
+          "startedUtc": "2026-11-15T05:58:39.8100997Z",
+          "seconds": 9.9921117,
+          "pass": 9,
+          "fail": 0,
+          "skip": 0,
+          "log": "hardware-offline.log",
+          "sha256": "b10e16115f4f9d716bfd4851b8cd07ee7b597abdc28eeee02c3aa6cba1d82e3d"
+        }
+      ]
+    }
+  ],
+  "challenges": [
+    {
+      "round": 1,
+      "file": "stability-R1-red.log",
+      "defect": "Legacy launcher reused a companion without an explicit read-only marker.",
+      "fix": "Both launcher callers require the legacy write-mode marker to be 0.",
+      "redLogSha256": "1444042c2a633d1592a7f0b4f7139401f177d931ee1ae854aefefa22a2a16f91",
+      "subsequentGreen": "GREEN1"
+    },
+    {
+      "round": 2,
+      "file": "stability-R2-red.log",
+      "defect": "Production write opt-in reused old writable Rust; direct legacy apply called collectors before denial.",
+      "fix": "Reject production opt-in before probing or spawning, and direct legacy apply before native or PnP work.",
+      "redLogSha256": "088537669769ae738a9a019f3ea1547eab5bdc23275c2f8cf15499f5a504a389",
+      "subsequentGreen": "GREEN2"
+    },
+    {
+      "round": 3,
+      "file": "stability-R3-red.log",
+      "defect": "Hosted production transport exposed old writable settings and sent a setter POST.",
+      "fix": "Production transport copies settings as read-only and rejects apply before pairing or fetch.",
+      "redLogSha256": "207d93696cf9f1f0d3fb6287a448cc95b6d54d426cf04bc16d0e5f6db8677ed6",
+      "subsequentGreen": "GREEN3"
+    }
+  ],
+  "finalSource": [
+    {
+      "path": "bridge/backend.mjs",
+      "sha256": "3c9cacd63696b703c5b99127cf6f0c020846d4695248b90bcbefad9e4aa3044b"
+    },
+    {
+      "path": "bridge/inventory.mjs",
+      "sha256": "c6409378a617388acb2129dcc6260aaa654c9a03438accce5e20d15333ede735"
+    },
+    {
+      "path": "bridge/native-host.cjs",
+      "sha256": "b37bc4068a524d31334ab53b19033038f25b911eec34ba8c57aee0f7a71895b5"
+    },
+    {
+      "path": "bridge/protocol.cjs",
+      "sha256": "ae332f44054fa81bd92cbdb244e0d0208af60851526d51dc62f8f6fea9716c7d"
+    },
+    {
+      "path": "bridge/rust-transport.mjs",
+      "sha256": "9847a71b13a6a3b0ec89262063e9d1e48e3dc457f00b691b87ed47c18765dc00"
+    },
+    {
+      "path": "bridge/rust/.gitignore",
+      "sha256": "306fd52e74fca6746e12acc750f232de15e71da917756a1270d74c91f5eb7368"
+    },
+    {
+      "path": "bridge/rust/Cargo.lock",
+      "sha256": "48c62c873c1c37f0760c2eeaea153eff9cbe5c2fbe57691181a56620910b6aa7"
+    },
+    {
+      "path": "bridge/rust/Cargo.toml",
+      "sha256": "22f12b18c7eac9b4b6d8326f5f6b6de37f8a2b4261e343074ff1b7ec586408ce"
+    },
+    {
+      "path": "bridge/rust/fixtures/protocol.json",
+      "sha256": "7857e41ff466397a5e6d2363e59130058af6114e1d3ebb37b5bf24c31f0378a9"
+    },
+    {
+      "path": "bridge/rust/src/adapter.rs",
+      "sha256": "d6d0c619dc9ee1a234ce103f3c599e1a13f2e6fed9334120ee9272fd031bd1c6"
+    },
+    {
+      "path": "bridge/rust/src/api_error.rs",
+      "sha256": "8a27215db39476eeed18bff835c0c48945a49a698791a5208b145c921221f51f"
+    },
+    {
+      "path": "bridge/rust/src/attachment.rs",
+      "sha256": "7da1ca2750002bda960e71f66ea9fccb3439a9b20ef89f8f769d6b1564f7cc9b"
+    },
+    {
+      "path": "bridge/rust/src/backend.rs",
+      "sha256": "cb6ff4c290a328c4ebe9441057e522c2a54b3ae26af73615a4f638758a635442"
+    },
+    {
+      "path": "bridge/rust/src/bin/razer-companion.rs",
+      "sha256": "cadbcfc067e3787f4c220fef77a1518222b00c174d880f6cf068fd70ea95ff1d"
+    },
+    {
+      "path": "bridge/rust/src/cli.rs",
+      "sha256": "f9aabac6b31a9ca1e2a527387a6870cd2db64e04922edfeb3bab75aa086ad81a"
+    },
+    {
+      "path": "bridge/rust/src/coordinator.rs",
+      "sha256": "6d678b7c0866a5145b0fd5442f45e74811870298c893b8760b8749cae76d172b"
+    },
+    {
+      "path": "bridge/rust/src/curve.rs",
+      "sha256": "275eac4afa34104d19bb006aa862e13dde16de97ca298a45effaa07bfe31ffd5"
+    },
+    {
+      "path": "bridge/rust/src/dispatch.rs",
+      "sha256": "339c950f03c37874af76ef5a8beeb7839f468a757f98a3ef7e1d086566219891"
+    },
+    {
+      "path": "bridge/rust/src/http_server.rs",
+      "sha256": "637976ed4622009ecdf46535a1ea180c6f10a32d4e3ff7da6ac82f2732ffd59c"
+    },
+    {
+      "path": "bridge/rust/src/http.rs",
+      "sha256": "689980e913eebb8b3afd0b18489760f819a0b6cf0b6f207e5b07c09e7017905b"
+    },
+    {
+      "path": "bridge/rust/src/inventory.rs",
+      "sha256": "500f2e1703236fe0950e7c49bc82a5f970bfb33ac6a1453082807e83107d84d6"
+    },
+    {
+      "path": "bridge/rust/src/js_value.rs",
+      "sha256": "c81b2c4a4e23f523ed3bde1297b0c393608538f1698f8c0ec6c4d5897d7c846f"
+    },
+    {
+      "path": "bridge/rust/src/lib.rs",
+      "sha256": "12b19f6052f47149490bfe23a785b97388c40120b48bf940c3b0e4e194a1fdfd"
+    },
+    {
+      "path": "bridge/rust/src/main.rs",
+      "sha256": "78bcd8044ceb85471d4e59069e51aa9782e88fee8e40360416f873007e5a8a4e"
+    },
+    {
+      "path": "bridge/rust/src/physical_backend.rs",
+      "sha256": "b8182155e1ee61776c233db5c0190ed958b745fc123315a4d7fc1be09959a9e8"
+    },
+    {
+      "path": "bridge/rust/src/process.rs",
+      "sha256": "fbe53997a99c05dd5ccdd91581b80a886fa2dd8188a262f85f0e69b7eb3ee656"
+    },
+    {
+      "path": "bridge/rust/src/recovery_http.rs",
+      "sha256": "56ee234d409b96620414fb532a4d28f784104741d88afd71d22c0f5497b80099"
+    },
+    {
+      "path": "bridge/rust/src/recovery_owner.rs",
+      "sha256": "12de43f7fc218c3e6e03ed1267e0c6c62e506afc7bd747e5e911bd8ba9034e86"
+    },
+    {
+      "path": "bridge/rust/src/recovery_snapshot.rs",
+      "sha256": "82ab4d66cb7952a0585c61c4ce019ff4aab71f714c8f13d4fd2eb097abd95346"
+    },
+    {
+      "path": "bridge/rust/src/recovery.rs",
+      "sha256": "743727fb69e55a5a0941fb253b2d6c004c4ae896219c564071ba722a87ccc27d"
+    },
+    {
+      "path": "bridge/rust/src/schema.rs",
+      "sha256": "011e6bfd9142ab8a9e3e771a270ef9ccb3a59eb73ab76a521b70560eaa9fa76c"
+    },
+    {
+      "path": "bridge/rust/src/session_guard.rs",
+      "sha256": "754d543412563bca1bdc5c7f02e024e88b099f7be2a2e54f2ac157b80a4a9b22"
+    },
+    {
+      "path": "bridge/rust/src/socket.rs",
+      "sha256": "1392539bc12f526a071d7f470b1d1fb2ee8f487ae65a46a6bda429596b2e891f"
+    },
+    {
+      "path": "bridge/rust/src/windows_inventory.rs",
+      "sha256": "cc90476e7860c8f38d18c02cf72b03704216db79ffdedfbf587cc3aca64b9735"
+    },
+    {
+      "path": "bridge/rust/src/worker_native.rs",
+      "sha256": "25d74fca041eb5f032e690952ce8d1d2c98d0b374f0b386a83255c15e4eb8faf"
+    },
+    {
+      "path": "bridge/rust/src/worker_session.rs",
+      "sha256": "9d28168b0f3b88c7d1cbdb773ac8a007c64e7f26efefadbb342842c1ebb0507a"
+    },
+    {
+      "path": "bridge/rust/src/worker.rs",
+      "sha256": "168932e47be69a8992789bb31ff8ac5d58e14586d92085025ff6d84cc6e79901"
+    },
+    {
+      "path": "bridge/rust/tests/adapter_parity.rs",
+      "sha256": "ee1f309a0e5775610ddce20114979e5b4944b9f47f5dd19d3aff1b905ab22f21"
+    },
+    {
+      "path": "bridge/rust/tests/boundary.rs",
+      "sha256": "6110480b395163fb0d36b8cc1ce4790349a30a817adecd08c070ff256bf84d80"
+    },
+    {
+      "path": "bridge/rust/tests/cli.rs",
+      "sha256": "35614cb93d3508ac2b67e852332c1a9ca1df725cff2e0bb9cd8e3248e922e2e6"
+    },
+    {
+      "path": "bridge/rust/tests/dispatch.rs",
+      "sha256": "17d9dae3b1f59e8e347b5203091014c817750e01e4a3fd7b114a6ee6b771d150"
+    },
+    {
+      "path": "bridge/rust/tests/golden.rs",
+      "sha256": "86e749bc7db989c9dd0cc6d1395a8520d16bf82491d7ec0670d8833e087ca45f"
+    },
+    {
+      "path": "bridge/rust/tests/http_contract.rs",
+      "sha256": "549e231706483ea630af032a28866025d18ecf28d4f5f0c561857a69360acd95"
+    },
+    {
+      "path": "bridge/rust/tests/http_review.rs",
+      "sha256": "98d95c5830d9f10f4eeae0ce4668faa0c951a9dafd9d91bdb1ced0f0fd3f23ef"
+    },
+    {
+      "path": "bridge/rust/tests/http_sockets.rs",
+      "sha256": "0fbce6f613045d7c84956faa8f15cbf1344c6f7876cfbc138c38e628c0d7e152"
+    },
+    {
+      "path": "bridge/rust/tests/inventory_parity.rs",
+      "sha256": "018b4ca3a20d5d98cb384a59d7ae85934de1c0384db4f1c0c614cbeeef8ac6f1"
+    },
+    {
+      "path": "bridge/rust/tests/lifecycle.rs",
+      "sha256": "0925c98ea943a53339c94508e1156183df424cfe74f4aeb8b7416d85f2b6623e"
+    },
+    {
+      "path": "bridge/rust/tests/native_http_socket.rs",
+      "sha256": "28c198ed582311b6ea0474e33dfbddd783e1c2d5540de51e979028bb9f6117a4"
+    },
+    {
+      "path": "bridge/rust/tests/physical.rs",
+      "sha256": "9c14de5f35af55104cf5b394b0b71ed3d18490c81a14f2cda070fb101d3ff788"
+    },
+    {
+      "path": "bridge/rust/tests/recovery_processes.rs",
+      "sha256": "bcc5b66ad6940486a9087d8fc11457a499da624c894444fb3b0d638b5cf0f76e"
+    },
+    {
+      "path": "bridge/rust/tests/recovery_values.rs",
+      "sha256": "a8559410d17d3033a8b9f351c56e3242b904c423db2ccc8b1baa7d3f65fa0e61"
+    },
+    {
+      "path": "bridge/rust/tests/recovery.rs",
+      "sha256": "1eb730d1492625db6bc8ff7aaa9d39639ce50144011a8470ea55a987e92d1426"
+    },
+    {
+      "path": "bridge/rust/tests/support/adapter_edges.rs",
+      "sha256": "c357b255a33efc09805bd510ef51f1caa949ca66fc3f848e33d40cbd3995faa9"
+    },
+    {
+      "path": "bridge/rust/tests/support/adapter_fake.rs",
+      "sha256": "8458e98ab18ff57789a5aceb8e20b6e2f3c32f5f25d6f1183516ada5eb39c3d3"
+    },
+    {
+      "path": "bridge/rust/tests/support/contract_backend.rs",
+      "sha256": "e8d0f92b965fe44bfa866d57839b10f62f538c0fc55a11f457e6fb73b82da84b"
+    },
+    {
+      "path": "bridge/rust/tests/support/contract_observations.rs",
+      "sha256": "e23d54de969087783155728b6c8c3dc46e4d218a84fe79a8fbfdb78171d60f20"
+    },
+    {
+      "path": "bridge/rust/tests/support/contract_server.rs",
+      "sha256": "c3f4d7844baf3b0c91a40c6fbda4609806362b4c52ce2437b6ff4cc88697aef3"
+    },
+    {
+      "path": "bridge/rust/tests/support/inventory_edges.rs",
+      "sha256": "bc31faff62c30814a4bccd044efdc28e3e4d5f6c299da0147d55f7e2fd7909dd"
+    },
+    {
+      "path": "bridge/rust/tests/support/lifecycle_fixture.rs",
+      "sha256": "5dbafd86ad65dcd44d581de15618a8ba1520d458084591181a515c2b41b2dfc2"
+    },
+    {
+      "path": "bridge/rust/tests/transactions.rs",
+      "sha256": "179e848b6e4d793ca168de44536c5541d67e7e5429ade8062426308911ca6102"
+    },
+    {
+      "path": "bridge/rust/tests/worker_authorization.rs",
+      "sha256": "ca6cd469731aaeaae6ddd72f7c060a797f61e0834b7709c9f922379be59864ce"
+    },
+    {
+      "path": "bridge/rust/tests/worker_open.rs",
+      "sha256": "45aefdc3faf27339af57613d5e3f3a5ef1af136ba7ba24244f123999c3e93d5c"
+    },
+    {
+      "path": "bridge/server.mjs",
+      "sha256": "78b6476e1a5c36b32740bd3168e83538f326d37caa0b9649d0f68b224c9b2036"
+    },
+    {
+      "path": "bridge/session-catalog.mjs",
+      "sha256": "c64b86a7d494ba5ef1eb02cdfed0f85e58326308d6cbf4700044c990543528fc"
+    },
+    {
+      "path": "bridge/synapse-session.mjs",
+      "sha256": "2af1a3f9ce49ee406ddacdf1eb04ff0ba329bdb369aca1022aae6144a1afb32f"
+    },
+    {
+      "path": "package-lock.json",
+      "sha256": "f26c62a732c3fc1288a558707d3ceb8dc8ba06c9a1bd55213a1bdbccb8c71868"
+    },
+    {
+      "path": "package.json",
+      "sha256": "fc81873b822fae37af7940cd046f72f87b6a61586f1204dea5691f2103cf2f18"
+    },
+    {
+      "path": "public/app.js",
+      "sha256": "0ebd32056c1425a8ad68783dc9e621b054771020d285c637a38a6a5fd0385cc7"
+    },
+    {
+      "path": "public/assets/models/catalog.js",
+      "sha256": "c73f6cfbfb5528a88a4c2ec011d026211fca54de0a46bff65a4a3151428f2c4f"
+    },
+    {
+      "path": "public/assets/models/razer-viper-v3-pro-se/reference.svg",
+      "sha256": "6035d646094a5bb55488f4c6364946db6ed4d3a91b34965f4c0b0c0c437f9506"
+    },
+    {
+      "path": "public/assets/models/razer-viper-v3-pro-se/source.json",
+      "sha256": "235252ad8de59f6b29055912df65767181decee95ea3d6cfdbbb803f5749032f"
+    },
+    {
+      "path": "public/assets/models/README.md",
+      "sha256": "e56fd8a1328f71db4d1c23ddb243d9c72d58d71b7ec5e764e4489ca404d7f335"
+    },
+    {
+      "path": "public/dom.js",
+      "sha256": "e597a610220ab3c10f7fc8864bff4a67c51f2438fef51c3402d237f74fd0dfe0"
+    },
+    {
+      "path": "public/editors.js",
+      "sha256": "f469e13481331fb39af4250a0dfa8b5f31f5355afa8445f3323f4156136ddf69"
+    },
+    {
+      "path": "public/i18n.js",
+      "sha256": "6bb3c7a0a5eda862cf8a42c5d3c3033099dc9fc3c31fbef3415a1e8ba74075d1"
+    },
+    {
+      "path": "public/icon.svg",
+      "sha256": "9889be24d2690eed69d37f5ee962c33f7a1397d4f18199095af03e09134600bf"
+    },
+    {
+      "path": "public/index.html",
+      "sha256": "ffa4976b6adc96981e7a7c0cc589c20bfc010f5da7cee542446ab3b167053291"
+    },
+    {
+      "path": "public/macro-view.js",
+      "sha256": "32c2dae03d2c14e8336918abdaa2e8458c218e2cba9f3ef8d8483c5873610dbe"
+    },
+    {
+      "path": "public/macros.js",
+      "sha256": "b568499bb67ca36caa8eb4b5011515eaa312f459e1676c26a5afc187d30bfd53"
+    },
+    {
+      "path": "public/models.js",
+      "sha256": "0be1e6be54416aec1405660ad56c8bfbca3bb702fbec22875ce7f52a23532e32"
+    },
+    {
+      "path": "public/motion.js",
+      "sha256": "a429f2436e7b71c45c23aa4c58fd8e3f2cab0c0f460c229fd2b190c7eea63c0e"
+    },
+    {
+      "path": "public/project-views.js",
+      "sha256": "c52570bca73f9ba6c18d098a47901707a234e3efb49237b9ffb0179098da3451"
+    },
+    {
+      "path": "public/review.js",
+      "sha256": "097c9bc5ada9079f1a7f4385c41d5abf56f712f302a6dba8cb573920b4c51e0b"
+    },
+    {
+      "path": "public/state.js",
+      "sha256": "97eb8386153a1dd4056fcf0697f1c855a5f1af83af1d2be4e2be9f85cda4cede"
+    },
+    {
+      "path": "public/style.css",
+      "sha256": "190b20776f45a2d3cc33083725fc2b596f4f51173e32e16142c237ea11fc1e0d"
+    },
+    {
+      "path": "public/transport.js",
+      "sha256": "b6ce34e321b22298d915c3818b42e89265fbbaab11508e664a7487ff1ae66c75"
+    },
+    {
+      "path": "public/vendor/gsap/Flip.min.js",
+      "sha256": "cbe3ca726350f8d230da38a14ce2384e7772e05a45cee6144dd7fe6dde868c2f"
+    },
+    {
+      "path": "public/vendor/gsap/gsap.min.js",
+      "sha256": "92bb9a96476f983d212a2bc4f54c889039c1696dd4461d40a736860938570fbb"
+    },
+    {
+      "path": "public/vendor/gsap/NOTICE.txt",
+      "sha256": "3240f1b0fcd0c7c6362e099b4866fd814008f1b471c1145e71e1013ddd979d78"
+    },
+    {
+      "path": "public/views.js",
+      "sha256": "4c3c5dac8764cb0d65e0072a83c125e41c29efd8d5a412ba3fd9de4f5986d46d"
+    },
+    {
+      "path": "scripts/bridge.mjs",
+      "sha256": "944f0a4dac371dcf126a492464078b99892b5ed1ae9482e050cb4561a9c92d2c"
+    },
+    {
+      "path": "scripts/mock-companion.mjs",
+      "sha256": "4ee078195997576ae6b0f503e9af3220bde4ad37bd865c79bf2c75e552be02f6"
+    },
+    {
+      "path": "scripts/start.mjs",
+      "sha256": "8f2164da36650b8b40edb56d9e9b06ffd1e50aba93ade807c1166e87972b0bf4"
+    },
+    {
+      "path": "scripts/sync-vendor.mjs",
+      "sha256": "83c5774fe4b7e26189005ac81a3be8e2cd83b0336937e451825df33e5e901d80"
+    },
+    {
+      "path": "scripts/verify-companion-contract.mjs",
+      "sha256": "edbd9505f41fbffaf9fd38fe5ff4c74e79192c771a83e121d0c8edca53707359"
+    },
+    {
+      "path": "scripts/verify-companion-hardware.ps1",
+      "sha256": "b76b045acf2f19f1e79b9200812cfddfb52ad918489c752350061e6396debe7d"
+    },
+    {
+      "path": "scripts/verify-companion-launcher.mjs",
+      "sha256": "f3338cf44f07002d2dbfaa7f5d79cbc17f95368894f87a015ecaf625d9f0c1c4"
+    },
+    {
+      "path": "scripts/verify-project-qa.mjs",
+      "sha256": "4388e002587fe1bbd69781ed663e69997e61f0689dbd48fc0bb5247962337638"
+    },
+    {
+      "path": "scripts/verify-ui.mjs",
+      "sha256": "a188197cfd6b245ae9f4a9baaaecb4c0202fe6470df93faed50db8c6dd17f914"
+    },
+    {
+      "path": "tests/bridge-refresh.test.mjs",
+      "sha256": "125c2dc848bad7ae8178f74a017d5c8bebca6b37d7fa6ff3388d8821cad85558"
+    },
+    {
+      "path": "tests/bridge.test.mjs",
+      "sha256": "29df5464568d47e46012299e85e7a08d9d788508b06fb1699f8ae67d307d391d"
+    },
+    {
+      "path": "tests/browser.test.mjs",
+      "sha256": "9d04c7e949aacab63d5761216579854576a4ec5f09ac76aaa92ae6233c49a932"
+    },
+    {
+      "path": "tests/capture-companion-baseline.mjs",
+      "sha256": "8094a6fac4a8e90d9216cbcacff606f4131950988697e43fdba23b2b84e13ff2"
+    },
+    {
+      "path": "tests/companion-adapter-support.mjs",
+      "sha256": "e4ae73acf38ed7af37014e92dd94513474c9173225972943f30e04fb905a541d"
+    },
+    {
+      "path": "tests/companion-contract.test.mjs",
+      "sha256": "14512ab69dd3f1c2d02acc538fd54b04a16d9459d4f429a085a7e9d824f1c706"
+    },
+    {
+      "path": "tests/companion-guard.test.mjs",
+      "sha256": "816d71a0308d8c915b10b570a92aeb6a419eff60b72f86c3173ef5a7ef4c45ee"
+    },
+    {
+      "path": "tests/companion-hardware-check.mjs",
+      "sha256": "7180f55e82b40dd1d22893a60f189010110c8e3284da36572abd03838be45cca"
+    },
+    {
+      "path": "tests/companion-inventory-support.mjs",
+      "sha256": "e6dae014ef1ba0912f24d437719de3930f6d97ad30097098810d2f6e7b73dc33"
+    },
+    {
+      "path": "tests/companion-launcher-runtime.test.mjs",
+      "sha256": "04b0548f074e7d793f30f253a6b0314474e91af8e6ec5a2118506c329d5b030b"
+    },
+    {
+      "path": "tests/companion-launcher-support.mjs",
+      "sha256": "08a78f505abc795e2c5ee8baca5dc6e8e4cf36b7c1dd6d2e2c9484735e6c20f5"
+    },
+    {
+      "path": "tests/companion-remote-support.mjs",
+      "sha256": "199f3099345a654ec63fe0a04bb0d00c4f39454cb38f7e54a5143d57d0d7512d"
+    },
+    {
+      "path": "tests/companion-scenario-support.mjs",
+      "sha256": "109110544147060955bf043e1224556ba16c3b25716a140f37e13a5fc1181dcd"
+    },
+    {
+      "path": "tests/companion-start.test.mjs",
+      "sha256": "8e1ac9437135615904a5fc103142dde174533d495e8417238eec1f1c149be1d2"
+    },
+    {
+      "path": "tests/companion-test-target.mjs",
+      "sha256": "85ac93d04da14d1c9e80ce3870d6ccd1f6adb565c33da84101a41db3cc1acc60"
+    },
+    {
+      "path": "tests/companion-wire-support.mjs",
+      "sha256": "8ac1f52149901bfd2e2135e1e45cab27a4b21bd44d7bb47085a8875a6fb386be"
+    },
+    {
+      "path": "tests/fixtures/adapter-parity.json",
+      "sha256": "6197773221d79b2d436ef8af83e39158b39d36ab49e4597b35f408bd684bfcad"
+    },
+    {
+      "path": "tests/fixtures/companion-contract.json",
+      "sha256": "694deaeb4b44e4132a994f6d8b8156faac8eee89f062d636798dcb08f06b9036"
+    },
+    {
+      "path": "tests/fixtures/inventory-parity.json",
+      "sha256": "3c189e715ff58811e738ecde3f016e8e46a837aea991892693f38ad0450c04c5"
+    },
+    {
+      "path": "tests/fixtures/legacy-source/bridge/backend.mjs",
+      "sha256": "0e19cda27767801a905fed2e8331ff4a75c1805814a938f5fa9bbc6a3434d0d3"
+    },
+    {
+      "path": "tests/fixtures/legacy-source/bridge/native-host.cjs",
+      "sha256": "0777f05b51f9ae5ea1828c7dd4950dc3ca8cb6059447c721cdfdd607e07de543"
+    },
+    {
+      "path": "tests/fixtures/legacy-source/bridge/server.mjs",
+      "sha256": "a1600b0c9cef49baa284ed9dc4252235476268f6503b7aaec412c10bd5b1560c"
+    },
+    {
+      "path": "tests/fixtures/legacy-source/public/transport.js",
+      "sha256": "2bf5ad5e676405d17032e34575166a3c823e2f97f0d61d3d0c36bbc55fa22dad"
+    },
+    {
+      "path": "tests/fixtures/legacy-source/tests/ui-fixture.mjs",
+      "sha256": "17fb702f165e436cb0c752cea0e588c6bbedae3f00f3c42a9afcd8dcadcd6635"
+    },
+    {
+      "path": "tests/fixtures/rust-read-only-parity.json",
+      "sha256": "54539dc9f9bb83b077b3324867932c376653b38aacbb5c6e26613ce46c9bc04c"
+    },
+    {
+      "path": "tests/frontend-project.test.mjs",
+      "sha256": "682ab4b897fc7a8d2e361ccbba46b656e762b0d8750b100ecd2308bc3d9c80e4"
+    },
+    {
+      "path": "tests/hosted-readonly.test.mjs",
+      "sha256": "fe171272a8e91f283b6b56a1816859c036a2021da65189e9caa8f38da648d03a"
+    },
+    {
+      "path": "tests/inspector.test.mjs",
+      "sha256": "727ce55711606a6e7d11c2c0db5af57c5ef23ccc43529488a78e30b8dc231fa4"
+    },
+    {
+      "path": "tests/inventory.test.mjs",
+      "sha256": "c35bd5726afcb63b0e4a41301bf766c6d6c660a07d87f537fa1496b17c250948"
+    },
+    {
+      "path": "tests/protocol.test.mjs",
+      "sha256": "710247057c64f8d461b1b358cc14f65ad665beb2af76ede30d20d89c3a63b7b7"
+    },
+    {
+      "path": "tests/qa-local-drafts.test.mjs",
+      "sha256": "2d0b3ca106288b1b35fe060b415079dddd4d069e1357562e67d25ff3fc8b9c8f"
+    },
+    {
+      "path": "tests/qa-regressions.test.mjs",
+      "sha256": "7401a999c472b5ba39ac3d184a87d653402512c945c60c7b18792bd37e1e20c1"
+    },
+    {
+      "path": "tests/rust-transport.test.mjs",
+      "sha256": "e0f462854a52d05487dfef9aec14adce8a61f6c02b0f13c5782f5c40522bb0e8"
+    },
+    {
+      "path": "tests/session.test.mjs",
+      "sha256": "2468f53decb9f51c5ceaa07a37ea9bf28157dcc9314f0ff4d7cc06bdb4a7eaa1"
+    },
+    {
+      "path": "tests/support/hardware-gates-check.ps1",
+      "sha256": "3d1f9b5a9903814c509f0d17c893a682c09a7e4333be8dbfd8a112d04ae5b9b3"
+    },
+    {
+      "path": "tests/support/launcher-pipe-fixture.mjs",
+      "sha256": "2c0638e9661db3410559ba97f1f15f59f2c1041966c97bce485b476cc297408f"
+    },
+    {
+      "path": "tests/ui-fixture.mjs",
+      "sha256": "627934138aa6d9097e5011dcab9fc0eacb33c6b4bb86421a27eccb3bd104a06c"
+    },
+    {
+      "path": "tests/ui-fixture.test.mjs",
+      "sha256": "d628ae4f810fcc76d1566801fe441e94c7f2afbbf05e55a828e31a5ef350fdbd"
+    },
+    {
+      "path": "tests/ui-state.test.mjs",
+      "sha256": "49714c959f8865548345ee40929d9a1ebc7b54e1577445ee60faccd7349c4ceb"
+    },
+    {
+      "path": "tests/write-gate.test.mjs",
+      "sha256": "432f25ce065ff42f0b8582e50e93b2dec521e650501f85c03144aaf60e779f93"
+    },
+    {
+      "path": "wrangler.jsonc",
+      "sha256": "4b65c9d10ee06dab1b576601f1b8fa60b7e75066f04d06a850d735253dbd90df"
+    }
+  ],
+  "environment": {
+    "node": "v24.19.0",
+    "npm": "11.17.0",
+    "rustc": "rustc 1.100.0 (0ef1bc386 2026-11-09)\nbinary: rustc\ncommit-hash: 0ef1bc386059596dada8fb65b50425aab2ea637a\ncommit-date: 2026-11-09\nhost: x86_64-pc-windows-msvc\nrelease: 1.100.0\nLLVM version: 23.1.5",
+    "cargo": "cargo 1.100.0 (3acc79c0c 2026-11-05)",
+    "powershell": "7.6.9",
+    "os": "Microsoft Windows NT 10.0.26200.0",
+    "cache": "preexisting workspace Cargo cache; not clean provision"
+  },
+  "binaries": [
+    {
+      "path": "bridge/rust/target/release/lifecycle-fixture.exe",
+      "sha256": "cd2c68a3c614c7dd960fc00a36e2a899ba656a7f4a9255c6e8a3e160117aff30"
+    },
+    {
+      "path": "bridge/rust/target/release/razer-companion.exe",
+      "sha256": "f0a0ed9909c54863a62b8302dede7273cf8414bab4672df310f0a8274f6a744a"
+    },
+    {
+      "path": "bridge/rust/target/release/razer-hid-helper.exe",
+      "sha256": "659d74de08ee669220ceb412896c2c46570523cd48b209ee56df0080b2807573"
+    }
+  ],
+  "commands": [
+    "npm test",
+    "cargo test --offline --locked --manifest-path bridge/rust/Cargo.toml",
+    "cargo fmt --manifest-path bridge/rust/Cargo.toml -- --check",
+    "cargo clippy --offline --locked --manifest-path bridge/rust/Cargo.toml --all-targets -- -D warnings",
+    "cargo build --offline --locked --release --manifest-path bridge/rust/Cargo.toml --bins",
+    "cargo test --offline --locked --manifest-path bridge/rust/Cargo.toml --test contract-server --no-run --message-format=json",
+    "node scripts/verify-companion-contract.mjs --candidate-test-server <discovered-contract-executable>",
+    "node scripts/verify-companion-launcher.mjs --candidate-test-server <discovered-contract-executable>",
+    "npm run build",
+    "node scripts/verify-project-qa.mjs",
+    "npm run test:ui",
+    "node --test tests/companion-hardware-check.mjs"
+  ],
+  "browserCoverage": {
+    "production": "tests/hosted-readonly.test.mjs uses current production transport with a mocked old writable companion in real Chromium; zero setter POSTs.",
+    "historical": {
+      "transportMode": "historical-mock",
+      "servedTransportPath": "tests/fixtures/legacy-source/public/transport.js",
+      "servedTransportSha256": "2bf5ad5e676405d17032e34575166a3c823e2f97f0d61d3d0c36bbc55fa22dad",
+      "productionTransportSha256": "b6ce34e321b22298d915c3818b42e89265fbbaab11508e664a7487ff1ae66c75",
+      "projectChecks": 13,
+      "uiChecks": 21,
+      "screenshots": 120
+    }
+  },
+  "independentReview": "A separate reviewer ran 47 focused tests, including production browser read-only; no material M0 issue remained.",
+  "safetyNote": "An initial red nativeRequest test enumerated interfaces before its fake target was rejected. It opened no selected HID device and dispatched no setter; the test harness was corrected to avoid physical enumeration.",
+  "limitations": [
+    "Local Windows checkout with existing caches, not a clean VM or fresh clone.",
+    "No OS network isolation; Rust commands use --offline --locked.",
+    "Fake backends and owned loopback servers only; no physical hardware verification.",
+    "No physical write/readback/restore evidence, soak, performance benchmark or stable-release acceptance.",
+    "Source rights and project license remain unresolved; Gate L is open.",
+    "Legacy hardware receipt disk hashes cannot prove already-loaded Node module bytes; future lab validation needs independently recorded immutable startup.",
+    "Old loaded tabs and running pre-M0 processes must be reloaded/restarted; deployment cannot revoke them.",
+    "Only production source is deployed; lifecycle-fixture.exe and contract-server are test tools, not release artifacts."
+  ]
+}

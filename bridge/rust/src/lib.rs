@@ -31,6 +31,14 @@ pub use schema::validate_value;
 pub const REPORT_LEN: usize = 90;
 pub const FEATURE_LEN: usize = 91;
 
+pub fn ensure_production_read_only(allow_writes: bool) -> Result<(), String> {
+    if allow_writes {
+        Err("Hardware writes are disabled: no verified model/firmware/setting evidence; --allow-writes is only a request".into())
+    } else {
+        Ok(())
+    }
+}
+
 pub fn checksum(packet: &[u8; REPORT_LEN]) -> u8 {
     packet[2..88].iter().fold(0, |sum, byte| sum ^ byte)
 }

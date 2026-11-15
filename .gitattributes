@@ -6,8 +6,12 @@ bridge/inventory.mjs -text whitespace=cr-at-eol
 bridge/native-host.cjs -text whitespace=cr-at-eol
 public/transport.js -text
 tests/fixtures/legacy-source/bridge/server.mjs -text whitespace=cr-at-eol
+tests/fixtures/legacy-source/bridge/backend.mjs -text whitespace=cr-at-eol
+tests/fixtures/legacy-source/bridge/native-host.cjs -text whitespace=cr-at-eol
+tests/fixtures/legacy-source/public/transport.js -text
 tests/fixtures/legacy-source/tests/ui-fixture.mjs -text
 tests/fixtures/rust-read-only-parity.json -text
+docs/audits/2026-11-13-source-manifest.json -text whitespace=cr-at-eol
 
 # Keep upstream distribution formatting intact.
 public/vendor/gsap/*.min.js -whitespace

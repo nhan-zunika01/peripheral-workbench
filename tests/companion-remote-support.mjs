@@ -1,5 +1,5 @@
 // Candidate scenarios send actual HTTP through the socket; IPC only controls fake backend gates/clock.
-import { createTransport } from '../public/transport.js';
+import { createTransport } from './fixtures/legacy-source/public/transport.js';
 import { request, deviceId, change, token, origin, basicSetting, scrubPairToken } from './companion-wire-support.mjs';
 const tick = () => new Promise(resolve => setImmediate(resolve));
 export async function captureRemoteScenario(target, input) {

@@ -6,7 +6,7 @@ import http from 'node:http';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { validateMappings } from '../bridge/session-catalog.mjs';
-import { createTransport } from '../public/transport.js';
+import { createTransport } from './fixtures/legacy-source/public/transport.js';
 import { createBridge } from '../bridge/server.mjs';
 import { startBridge, closeBridge, request, fakeBackend, change, deviceId, origin, token, basicSetting } from './companion-wire-support.mjs';
 

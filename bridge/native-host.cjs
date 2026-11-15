@@ -137,14 +137,16 @@ async function handleRequest(request, hid) {
 module.exports = { inspect, handleRequest };
 if (require.main === module) {
 const engineDirectory = path.dirname(process.execPath);
-const hid = require(path.join(engineDirectory, 'resources/app.asar/node_modules/node-rz-hid'));
 let text = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', chunk => { text += chunk; if (text.length > 16384) process.exit(1); });
 process.stdin.on('end', async () => {
   try {
     const request = JSON.parse(text);
+    if (request?.action === 'apply') throw new Error('Legacy transport is read-only; hardware writes have not been verified');
+    const hid = require(path.join(engineDirectory, 'resources/app.asar/node_modules/node-rz-hid'));
     const result = await handleRequest(request, hid);
+    if (request.action === 'snapshot') result.settings = result.settings.map(setting => ({ ...setting, writable: false }));
     process.stdout.write(`MOUSE_CONTROL_RESULT:${JSON.stringify(result)}\n`);
   } catch (error) {
     process.stdout.write(`MOUSE_CONTROL_RESULT:${JSON.stringify({ error: error.message })}\n`);

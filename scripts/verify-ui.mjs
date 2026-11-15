@@ -1,8 +1,9 @@
 import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, writeFileSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync, readdirSync, readFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createHash } from 'node:crypto';
 import { fixture, deviceA, deviceB } from '../tests/ui-fixture.mjs';
 
 const base = process.env.UI_URL || 'http://127.0.0.1:8787';
@@ -12,10 +13,20 @@ const existingEntry = outputOverride && existsSync(outputPath) && readdirSync(ou
 if (existingEntry) throw new Error(`UI_OUTPUT ${outputPath}/${existingEntry} already exists; choose a new candidate output directory`);
 mkdirSync(outputPath, { recursive: true });
 const output = pathToFileURL(outputPath + sep);
+const source = resolve(process.env.QA_SOURCE_ROOT || fileURLToPath(new URL('../', import.meta.url)));
+const servedTransportPath = resolve(source, 'tests/fixtures/legacy-source/public/transport.js');
+const transportReceipt = () => ({
+  transportMode: 'historical-mock', servedTransportPath,
+  servedTransportSha256: createHash('sha256').update(readFileSync(servedTransportPath)).digest('hex'),
+  productionTransportSha256: createHash('sha256').update(readFileSync(resolve(source, 'public/transport.js'))).digest('hex')
+});
+const transportReceipts = transportReceipt();
 const browser = await chromium.launch({ headless: true, ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}) });
 const context = await browser.newContext();
 const page = await context.newPage();
 const errors = [], writes = [], checks = [], screenshots = [];
+await context.route(url => url.origin === new URL(base).origin && url.pathname.endsWith('/transport.js'), route =>
+  route.fulfill({ body: readFileSync(servedTransportPath), contentType: 'application/javascript' }));
 const initialSnapshot = fixture();
 const initialDpi = structuredClone(initialSnapshot.settings.find(setting => setting.id === 'dpi')?.value || { x: 800, y: 800 });
 const dpiSetting = initialSnapshot.settings.find(setting => setting.id === 'dpi');
@@ -266,7 +277,8 @@ try {
     offline = true; await page.locator('[data-action=refresh]').click(); await page.getByRole('heading', { name: 'Connect your Windows companion' }).waitFor(); await capture('state-offline.png');
   });
   assert.deepEqual(errors, []); checks.push('96 bilingual viewport/route screenshots: no overflow, one h1, all inputs labelled');
-  writeFileSync(new URL('browser-report.json', output), JSON.stringify({ checks, writes: writes.map(({ id, deviceId }) => ({ id, deviceId })), screenshots, pageErrors: errors }, null, 2));
+  assert.deepEqual(transportReceipt(), transportReceipts, 'Transport changed during acceptance; rerun the stable candidate');
+  writeFileSync(new URL('browser-report.json', output), JSON.stringify({ source, ...transportReceipts, checks, writes: writes.map(({ id, deviceId }) => ({ id, deviceId })), screenshots, pageErrors: errors }, null, 2));
   process.stdout.write(`PASS ${checks.length} checks; ${screenshots.length} screenshots; 0 page errors\n`);
 } catch (error) {
   process.stderr.write(`${await page.url()}\n${await page.locator('body').innerText()}\nPage errors: ${JSON.stringify(errors)}\n`);

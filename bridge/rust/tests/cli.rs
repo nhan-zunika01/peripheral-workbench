@@ -51,6 +51,76 @@ fn legacy_inspector_environment_fails_before_guard_or_hardware() {
 }
 
 #[test]
+fn explicit_write_request_is_preserved_by_parsing_but_rejected_by_production() {
+    use std::process::{Command, Stdio};
+    assert!(
+        parse(&args(&["--allow-writes"]), None)
+            .unwrap()
+            .allow_writes
+    );
+    for mode in [
+        vec!["--allow-writes"],
+        vec!["--allow-writes", "--internal-worker"],
+    ] {
+        // The inspector blocker keeps the unfixed binary from reaching any session or HID.
+        let output = Command::new(env!("CARGO_BIN_EXE_razer-companion"))
+            .args(mode)
+            .env("SYNAPSE_INSPECTOR_URL", "http://127.0.0.1:9222")
+            .env_remove("UI_ORIGIN")
+            .stdin(Stdio::null())
+            .output()
+            .unwrap();
+        assert!(!output.status.success());
+        let error = String::from_utf8(output.stderr).unwrap();
+        assert!(
+            error.contains("no verified model/firmware/setting evidence"),
+            "{error}"
+        );
+        assert!(output.stdout.is_empty());
+    }
+    for mode in [
+        vec!["--allow-writes", "--read-only"],
+        vec!["--read-only", "--allow-writes"],
+        vec!["--allow-writes", "--recover-read-only"],
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_razer-companion"))
+            .args(mode)
+            .env("SYNAPSE_INSPECTOR_URL", "http://127.0.0.1:9222")
+            .env_remove("UI_ORIGIN")
+            .stdin(Stdio::null())
+            .output()
+            .unwrap();
+        assert!(!output.status.success());
+        let error = String::from_utf8(output.stderr).unwrap();
+        assert!(
+            error.contains("SYNAPSE_INSPECTOR_URL is incompatible"),
+            "{error}"
+        );
+    }
+}
+
+#[test]
+fn raw_helper_rejects_unverified_writes_before_reading_requests() {
+    use std::process::{Command, Stdio};
+    // EOF exercises startup without sending a request that could enumerate HID on the unfixed binary.
+    let output = Command::new(env!("CARGO_BIN_EXE_razer-hid-helper"))
+        .arg("--allow-writes")
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(
+        !output.status.success(),
+        "the raw HID helper accepted an unverified write mode"
+    );
+    let error = String::from_utf8(output.stderr).unwrap();
+    assert!(
+        error.contains("no verified model/firmware/setting evidence"),
+        "{error}"
+    );
+    assert!(output.stdout.is_empty());
+}
+
+#[test]
 fn managed_shutdown_is_a_private_normal_server_mode_only() {
     assert!(parse(&args(&["--managed-shutdown", "--read-only"]), None).is_ok());
     for values in [

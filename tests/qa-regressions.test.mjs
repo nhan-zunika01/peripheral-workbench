@@ -16,7 +16,7 @@ test('focused clean object editor preserves the newer sibling from a completed p
     page.on('pageerror', error => errors.push(error.message));
     await context.route('http://qa.local/**', async route => {
       const pathname = new URL(route.request().url()).pathname;
-      const file = new URL(`../public${pathname === '/' ? '/index.html' : pathname}`, import.meta.url);
+      const file = pathname === '/transport.js' ? new URL('./fixtures/legacy-source/public/transport.js', import.meta.url) : new URL(`../public${pathname === '/' ? '/index.html' : pathname}`, import.meta.url);
       const contentType = pathname.endsWith('.js') ? 'application/javascript' : pathname.endsWith('.css') ? 'text/css' : pathname === '/' ? 'text/html' : 'image/svg+xml';
       try { await route.fulfill({ body: await readFile(file), contentType }); }
       catch { await route.fulfill({ status: 404, body: '' }); }

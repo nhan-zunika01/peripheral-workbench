@@ -37,7 +37,7 @@ test('frozen fixture provenance preserves source bytes or the explicitly extende
         try { assert.deepEqual((await import('./ui-fixture.mjs')).fixture(), load('adapter-parity').uiSnapshot); }
         finally { if (previous === undefined) delete process.env.UI_SCHEMA_FIXTURE; else process.env.UI_SCHEMA_FIXTURE = previous; }
       }
-      const source = ['bridge/server.mjs', 'tests/ui-fixture.mjs'].includes(path) ? `./fixtures/legacy-source/${path}` : `../${path}`;
+      const source = ['bridge/server.mjs', 'bridge/backend.mjs', 'bridge/native-host.cjs', 'public/transport.js', 'tests/ui-fixture.mjs'].includes(path) ? `./fixtures/legacy-source/${path}` : `../${path}`;
       const actual = createHash('sha256').update(readFileSync(new URL(source, import.meta.url))).digest('hex');
       assert.equal(actual, expected, `${name}: legacy oracle source changed: ${path}`);
     }
@@ -258,7 +258,16 @@ test('inventory oracle binds exact identities, endpoint grouping, selected paths
   const fixture = load('inventory-parity');
   for (const id of ['container-group', 'no-container', 'two-identical', 'stale-selection', 'unknown-sku', 'deterministic-sort', 'connected-warning', 'disconnected-warning']) assert.ok(fixture.cases.some(row => row.id === id), `missing inventory capability: ${id}`);
   const { captureInventory } = await import('./companion-inventory-support.mjs');
-  for (const row of fixture.cases) assert.deepEqual(await captureInventory(row.input), row.legacy, row.id);
+  for (const row of fixture.cases) {
+    const expected = structuredClone(row.legacy);
+    // T04 closes production capabilities; historical adapter protocol fixtures stay writable.
+    for (const result of expected.results) for (const setting of result.settings || []) setting.writable = false;
+    if (['stale-selection', 'unknown-sku'].includes(row.id)) {
+      expected.results[expected.results.length - 1] = { error: 'Legacy transport is read-only; hardware writes have not been verified', status: 400 };
+      expected.transcript.pop(); // Direct apply is rejected before the historical inventory read.
+    }
+    assert.deepEqual(await captureInventory(row.input), expected, row.id);
+  }
   const two = fixture.cases.find(row => row.id === 'two-identical').legacy.groups;
   assert.equal(new Set(two.map(row => row.id)).size, 2);
   const stale = fixture.cases.find(row => row.id === 'stale-selection').legacy;
