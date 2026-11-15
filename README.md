@@ -2,6 +2,8 @@
 
 A browser interface and local Windows companion for Razer devices. The interface runs on a Cloudflare Worker; hardware access stays on the Windows computer connected to the device.
 
+Interface: [peripheral.zhkxt.id.vn](https://peripheral.zhkxt.id.vn). The deployed M0 interface is read-only. GitHub automatic deployment is not connected yet; [setup](docs/setup.md#deploy-the-interface) records the required Workers Builds connection.
+
 Device discovery covers Razer endpoints exposed by Windows. Settings adapters currently support the inspected Viper V3 Pro SE (`1532:00DE` / `1532:00DF`). Other models are detected without enabling device commands. Macros are browser-local drafts without recording or execution.
 
 ## Run locally

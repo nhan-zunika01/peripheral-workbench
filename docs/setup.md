@@ -53,6 +53,8 @@ Drafts autosave to localStorage for the current browser and origin. Save explici
 
 ## Deploy the interface
 
+Current deployment: [peripheral.zhkxt.id.vn](https://peripheral.zhkxt.id.vn), deployed from source commit `835f439` using Wrangler. All 23 public asset hashes matched the tested source. GitHub automatic deployment is not connected: the current OAuth lacks Workers Builds access and dashboard access could not be verified by the browser tool. The steps below describe the remaining connection; they are not a claim that it is configured.
+
 ```powershell
 npm test
 npm run build

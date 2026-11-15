@@ -6,7 +6,7 @@ Thứ tự quyết định: tránh ghi sai thiết bị và mất dữ liệu; p
 
 ## Các cổng phát hành độc lập
 
-Tiến độ M0 ngày 15/11/2026: đã khóa ghi ở các entrypoint production, launcher và transport của trang web. Ba vòng regression đã tái hiện lỗi rồi sửa; mỗi vòng được theo sau bởi toàn bộ suite đạt. Lượt cuối có 111 test Node, 154 test Rust và 9 test hardware offline, cùng differential, launcher và browser QA. Xem [baseline](quality/baseline.md) và [manifest kiểm chứng M0](quality/m0-validation.json). T01 đã có [danh mục quyền ban đầu](legal/status.md), chưa chọn license. T00 mới có bằng chứng Windows cục bộ, nên M0 chưa được nghiệm thu hoàn toàn theo yêu cầu VM sạch và fresh clone. Các cổng L/C/H/R vẫn chưa đạt; chưa mở ghi phần cứng.
+Tiến độ M0 ngày 15/11/2026: đã khóa ghi ở các entrypoint production, launcher và transport của trang web. Ba vòng regression đã tái hiện lỗi rồi sửa; mỗi vòng được theo sau bởi toàn bộ suite đạt. Lượt cuối có 111 test Node, 154 test Rust và 9 test hardware offline, cùng differential, launcher và browser QA. Xem [baseline](quality/baseline.md) và [manifest kiểm chứng M0](quality/m0-validation.json). T01 đã có [danh mục quyền ban đầu](legal/status.md), chưa chọn license. Clone mới từ GitHub đã chạy lại đủ suite trên cùng máy. T00 còn thiếu VM sạch và môi trường cách ly, nên M0 chưa được nghiệm thu hoàn toàn. Các cổng L/C/H/R vẫn chưa đạt; chưa mở ghi phần cứng.
 
 | Cổng | Bằng chứng bắt buộc | Trạng thái ngày rà soát |
 | --- | --- | --- |

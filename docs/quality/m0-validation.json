@@ -1291,5 +1291,295 @@
     "Legacy hardware receipt disk hashes cannot prove already-loaded Node module bytes; future lab validation needs independently recorded immutable startup.",
     "Old loaded tabs and running pre-M0 processes must be reloaded/restarted; deployment cannot revoke them.",
     "Only production source is deployed; lifecycle-fixture.exe and contract-server are test tools, not release artifacts."
-  ]
+  ],
+  "publishedSourceCommit": "835f4397bee648b46fab9d8ce073de3f89e2b244",
+  "freshClone": {
+    "sourceCommit": "835f4397bee648b46fab9d8ce073de3f89e2b244",
+    "sourceFilesMatch": 140,
+    "sourceStable": true,
+    "provisioning": "npm ci from lockfile passed; existing local Cargo cache and installed public toolchain used.",
+    "npmProvisionLogSha256": "10eaf01ec393d33dbd1c73392b537cd5982b9f2bdc5111ce15b355a43e17d5b3",
+    "receiptSha256": "e04179698b175b37749dad90bc0a40c58b2a7af0e9977c203617f1702fe82f98",
+    "phases": [
+      {
+        "phase": "node-test",
+        "exitCode": 0,
+        "status": "PASS",
+        "startedUtc": "2026-11-15T06:03:24.4127844Z",
+        "seconds": 4.6781427,
+        "pass": 111,
+        "fail": 0,
+        "skip": 0,
+        "log": "node-test.log",
+        "sha256": "5e5c9a7c6b37e1c56fbbcdbfaf33d6f7c17a78ba13e7e4482b87503d77c56b45"
+      },
+      {
+        "phase": "cargo-test",
+        "exitCode": 0,
+        "status": "PASS",
+        "startedUtc": "2026-11-15T06:03:29.1009956Z",
+        "seconds": 50.1102425,
+        "pass": 154,
+        "fail": 0,
+        "skip": 0,
+        "log": "cargo-test.log",
+        "sha256": "7fcfdffa3754908c2b6d97e0e84d4867fe6390e74372f4818e3897074d84af5e"
+      },
+      {
+        "phase": "cargo-fmt",
+        "exitCode": 0,
+        "status": "PASS",
+        "startedUtc": "2026-11-15T06:04:19.2137795Z",
+        "seconds": 0.2455227,
+        "pass": 0,
+        "fail": 0,
+        "skip": 0,
+        "log": "cargo-fmt.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "phase": "cargo-clippy",
+        "exitCode": 0,
+        "status": "PASS",
+        "startedUtc": "2026-11-15T06:04:19.4619291Z",
+        "seconds": 11.7349092,
+        "pass": 0,
+        "fail": 0,
+        "skip": 0,
+        "log": "cargo-clippy.log",
+        "sha256": "be7119defd2ece07a9ffe3f382533f56f87d6538292f4e3d112ecf698dc977f3"
+      },
+      {
+        "phase": "cargo-release",
+        "exitCode": 0,
+        "status": "PASS",
+        "startedUtc": "2026-11-15T06:04:31.1991086Z",
+        "seconds": 28.0753567,
+        "pass": 0,
+        "fail": 0,
+        "skip": 0,
+        "log": "cargo-release.log",
+        "sha256": "99f87dae6d0bc50c4f0027ab31d8e16946326f88100bcd0a8ba78e8b46a75bc1"
+      },
+      {
+        "phase": "contract-build",
+        "exitCode": 0,
+        "status": "PASS",
+        "startedUtc": "2026-11-15T06:04:59.2771052Z",
+        "seconds": 0.1359139,
+        "pass": 0,
+        "fail": 0,
+        "skip": 0,
+        "log": "contract-build.log",
+        "sha256": "72114122ea328d2a24d795f1246fdfd494363469fee06855dc4fdc10bac63c4d"
+      },
+      {
+        "phase": "differential",
+        "exitCode": 0,
+        "status": "PASS",
+        "startedUtc": "2026-11-15T06:04:59.4321122Z",
+        "seconds": 0.4659544,
+        "pass": 0,
+        "fail": 0,
+        "skip": 0,
+        "log": "differential.log",
+        "sha256": "82272c2df8e3540c455a9b3a92ff14a852d805a3cd69d8dd4d30ec0fc5221c3c",
+        "cases": 134
+      },
+      {
+        "phase": "launcher",
+        "exitCode": 0,
+        "status": "PASS",
+        "startedUtc": "2026-11-15T06:04:59.9003396Z",
+        "seconds": 0.2487004,
+        "pass": 0,
+        "fail": 0,
+        "skip": 0,
+        "log": "launcher.log",
+        "sha256": "d5717eae523cc6db86ea7ba351684ff6ae189be7d18e4dc9aff5522c412b1e78",
+        "cases": 4
+      },
+      {
+        "phase": "frontend-build",
+        "exitCode": 0,
+        "status": "PASS",
+        "startedUtc": "2026-11-15T06:05:00.1520401Z",
+        "seconds": 1.3887896,
+        "pass": 0,
+        "fail": 0,
+        "skip": 0,
+        "log": "frontend-build.log",
+        "sha256": "fb0becb465b22c63cb61466d4bcd3a1821196ef38d22c057add72fcd92421aa0"
+      },
+      {
+        "phase": "project-qa",
+        "exitCode": 0,
+        "status": "PASS",
+        "startedUtc": "2026-11-15T06:05:01.5429211Z",
+        "seconds": 11.8616854,
+        "pass": 0,
+        "fail": 0,
+        "skip": 0,
+        "log": "project-qa.log",
+        "sha256": "2a07b3bbfcda672aae3e4bf9ab42a299516d163620fb385defb74e6ca494be39",
+        "checks": 13,
+        "screenshots": 24,
+        "pageErrors": 0
+      },
+      {
+        "phase": "ui",
+        "exitCode": 0,
+        "status": "PASS",
+        "startedUtc": "2026-11-15T06:05:13.5984149Z",
+        "seconds": 28.5028486,
+        "pass": 0,
+        "fail": 0,
+        "skip": 0,
+        "log": "ui.log",
+        "sha256": "bd8596556d107588777ba0b305029da8a715fcc9087d25bc975ee8aa148c328b",
+        "checks": 21,
+        "screenshots": 96,
+        "pageErrors": 0
+      },
+      {
+        "phase": "hardware-offline",
+        "exitCode": 0,
+        "status": "PASS",
+        "startedUtc": "2026-11-15T06:05:42.1177862Z",
+        "seconds": 8.9219941,
+        "pass": 9,
+        "fail": 0,
+        "skip": 0,
+        "log": "hardware-offline.log",
+        "sha256": "309d48c43dc31308511f4d77a567e61897e9fdd891ecd6aeb4e83a87b920b7f0"
+      }
+    ],
+    "limitations": [
+      "Fresh remote clone on the same Windows host, not a clean VM or independent machine.",
+      "No OS network isolation; Cargo test/build commands use --offline --locked."
+    ]
+  },
+  "deployment": {
+    "provider": "Cloudflare Workers",
+    "worker": "peripheral-workbench",
+    "origin": "https://peripheral.zhkxt.id.vn",
+    "versionId": "fd845a7b-be68-40c3-8f05-1e81b960d22e",
+    "sourceCommit": "835f4397bee648b46fab9d8ce073de3f89e2b244",
+    "method": "Authenticated Wrangler deploy after GitHub push",
+    "smoke": {
+      "origin": "https://peripheral.zhkxt.id.vn",
+      "checkedAt": "2026-11-15T06:02:42.478Z",
+      "status": "PASS",
+      "https": true,
+      "homepage": 200,
+      "apiInfo": 200,
+      "assetCount": 23,
+      "staticSecurityHeaders": true,
+      "assets": [
+        {
+          "path": "app.js",
+          "sha256": "0ebd32056c1425a8ad68783dc9e621b054771020d285c637a38a6a5fd0385cc7"
+        },
+        {
+          "path": "dom.js",
+          "sha256": "e597a610220ab3c10f7fc8864bff4a67c51f2438fef51c3402d237f74fd0dfe0"
+        },
+        {
+          "path": "editors.js",
+          "sha256": "f469e13481331fb39af4250a0dfa8b5f31f5355afa8445f3323f4156136ddf69"
+        },
+        {
+          "path": "i18n.js",
+          "sha256": "6bb3c7a0a5eda862cf8a42c5d3c3033099dc9fc3c31fbef3415a1e8ba74075d1"
+        },
+        {
+          "path": "icon.svg",
+          "sha256": "9889be24d2690eed69d37f5ee962c33f7a1397d4f18199095af03e09134600bf"
+        },
+        {
+          "path": "index.html",
+          "sha256": "ffa4976b6adc96981e7a7c0cc589c20bfc010f5da7cee542446ab3b167053291"
+        },
+        {
+          "path": "macro-view.js",
+          "sha256": "32c2dae03d2c14e8336918abdaa2e8458c218e2cba9f3ef8d8483c5873610dbe"
+        },
+        {
+          "path": "macros.js",
+          "sha256": "b568499bb67ca36caa8eb4b5011515eaa312f459e1676c26a5afc187d30bfd53"
+        },
+        {
+          "path": "models.js",
+          "sha256": "0be1e6be54416aec1405660ad56c8bfbca3bb702fbec22875ce7f52a23532e32"
+        },
+        {
+          "path": "motion.js",
+          "sha256": "a429f2436e7b71c45c23aa4c58fd8e3f2cab0c0f460c229fd2b190c7eea63c0e"
+        },
+        {
+          "path": "project-views.js",
+          "sha256": "c52570bca73f9ba6c18d098a47901707a234e3efb49237b9ffb0179098da3451"
+        },
+        {
+          "path": "review.js",
+          "sha256": "097c9bc5ada9079f1a7f4385c41d5abf56f712f302a6dba8cb573920b4c51e0b"
+        },
+        {
+          "path": "state.js",
+          "sha256": "97eb8386153a1dd4056fcf0697f1c855a5f1af83af1d2be4e2be9f85cda4cede"
+        },
+        {
+          "path": "style.css",
+          "sha256": "190b20776f45a2d3cc33083725fc2b596f4f51173e32e16142c237ea11fc1e0d"
+        },
+        {
+          "path": "transport.js",
+          "sha256": "b6ce34e321b22298d915c3818b42e89265fbbaab11508e664a7487ff1ae66c75"
+        },
+        {
+          "path": "views.js",
+          "sha256": "4c3c5dac8764cb0d65e0072a83c125e41c29efd8d5a412ba3fd9de4f5986d46d"
+        },
+        {
+          "path": "assets/models/catalog.js",
+          "sha256": "c73f6cfbfb5528a88a4c2ec011d026211fca54de0a46bff65a4a3151428f2c4f"
+        },
+        {
+          "path": "assets/models/README.md",
+          "sha256": "e56fd8a1328f71db4d1c23ddb243d9c72d58d71b7ec5e764e4489ca404d7f335"
+        },
+        {
+          "path": "vendor/gsap/Flip.min.js",
+          "sha256": "cbe3ca726350f8d230da38a14ce2384e7772e05a45cee6144dd7fe6dde868c2f"
+        },
+        {
+          "path": "vendor/gsap/gsap.min.js",
+          "sha256": "92bb9a96476f983d212a2bc4f54c889039c1696dd4461d40a736860938570fbb"
+        },
+        {
+          "path": "vendor/gsap/NOTICE.txt",
+          "sha256": "3240f1b0fcd0c7c6362e099b4866fd814008f1b471c1145e71e1013ddd979d78"
+        },
+        {
+          "path": "assets/models/razer-viper-v3-pro-se/reference.svg",
+          "sha256": "6035d646094a5bb55488f4c6364946db6ed4d3a91b34965f4c0b0c0c437f9506"
+        },
+        {
+          "path": "assets/models/razer-viper-v3-pro-se/source.json",
+          "sha256": "235252ad8de59f6b29055912df65767181decee95ea3d6cfdbbb803f5749032f"
+        }
+      ]
+    },
+    "gitIntegration": {
+      "status": "NOT CONFIGURED",
+      "reason": "Current Wrangler OAuth received 403 for Workers Builds; dashboard Computer Use ended because its helper could not verify the dashboard URL. GitHub App authorization remains unverified.",
+      "configuration": {
+        "repository": "nhan-zunika01/peripheral-workbench",
+        "branch": "main",
+        "root": "/",
+        "buildCommand": "npm run build",
+        "deployCommand": "npm run deploy"
+      }
+    }
+  }
 }

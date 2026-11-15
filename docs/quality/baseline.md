@@ -1,6 +1,6 @@
 # Baseline kiểm chứng T00
 
-Ngày chạy: 15/11/2026 (Asia/Saigon). Đây là kết quả trên Windows cục bộ, dùng checkout và cache hiện có. Chưa có Windows VM sạch, fresh clone hoặc cách ly mạng ở cấp hệ điều hành; vì vậy chưa thông qua cổng C của roadmap.
+Ngày chạy: 15/11/2026 (Asia/Saigon). Baseline gốc dùng checkout và cache hiện có trên Windows cục bộ. Sau khi push M0, đã clone mới từ GitHub và chạy đủ suite trên cùng máy. Chưa có Windows VM sạch hoặc cách ly mạng ở cấp hệ điều hành; vì vậy chưa thông qua cổng C của roadmap.
 
 Manifest công khai: [m0-evidence.json](m0-evidence.json). File này chứa hash nguồn, lockfile, binary và log; không chứa token, serial, USB path hoặc đường dẫn hồ sơ người dùng. Log và ảnh raw nằm trong scratch bị Git bỏ qua, không phải tài liệu phân phối.
 
@@ -60,4 +60,8 @@ Regression trình duyệt production dùng transport hiện tại với companio
 
 Harness cục bộ nằm trong scratch `.superpowers/sdd/2026-11-13-stability-open-source/validate.ps1`; nhận `-Output` là thư mục mới và có thể nhận `-RustBin`, `-CargoCache` để dùng toolchain/cache khác. Nó lưu nguồn trước/sau, từng exit code, số test và hash log; source thay đổi giữa lượt làm receipt thất bại. Harness kiểm Node, Cargo, fmt/clippy, release, differential, launcher, build, project QA, `test:ui` và hardware offline. UI dùng server tĩnh loopback do lượt chạy tạo và dừng, cùng mock companion của test.
 
-Người chạy lại cần provision lockfile, toolchain và browser trước khi cách ly môi trường. Chưa có bằng chứng fresh clone độc lập; chưa chạy hardware thật, soak, benchmark hoặc kiểm package/license trong T00.
+Clone mới từ commit `835f4397bee648b46fab9d8ce073de3f89e2b244` khớp đủ 140 hash mã/test của GREEN3. `npm ci` từ lockfile đạt; cả 12 phase chạy lại đều đạt với 111 test Node, 154 test Rust và 9 test offline. Cargo dùng cache sẵn có và toolchain công khai đã cài; kết quả này chưa chứng minh provision Rust từ đầu trên máy sạch. Manifest M0 lưu receipt và giới hạn của lượt clone.
+
+Website đã được triển khai bằng Wrangler tại [peripheral.zhkxt.id.vn](https://peripheral.zhkxt.id.vn). HTTPS, trang chủ và `/api/info` đạt; cả 23 asset công khai có hash khớp nguồn đã test. Workers Builds chưa nối với GitHub do thiếu quyền API trong OAuth hiện có và không xác minh được phiên dashboard bằng công cụ trình duyệt.
+
+Người chạy lại cần provision lockfile, toolchain và browser trước khi cách ly môi trường. Chưa có bằng chứng từ máy độc lập; chưa chạy hardware thật, soak, benchmark hoặc kiểm package/license trong T00.
