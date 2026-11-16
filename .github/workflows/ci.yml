@@ -1,9 +1,8 @@
-name: CI
+name: CI refusal proof
 
 on:
   push:
-  pull_request:
-  workflow_dispatch:
+    branches: [codex/m1-ci-negative-proof]
 
 permissions:
   contents: read
@@ -13,16 +12,23 @@ defaults:
     shell: pwsh
 
 jobs:
-  windows:
-    name: Windows ${{ matrix.suite }}
+  refusal:
+    name: Reject ${{ matrix.case }}
     runs-on: windows-2025
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        suite: [core, browser, hardware]
+        include:
+          - case: fixture
+            suite: core
+          - case: binary
+            suite: core
+          - case: browser
+            suite: browser
     env:
       CI: 'true'
+      CI_REFUSAL_CASE: ${{ matrix.case }}
       WRANGLER_SEND_METRICS: 'false'
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
@@ -40,91 +46,25 @@ jobs:
           rustup toolchain install 1.100.0 --profile minimal --component rustfmt,clippy --target x86_64-pc-windows-msvc
           npm ci
           cargo fetch --locked --manifest-path bridge/rust/Cargo.toml
-          if ('${{ matrix.suite }}' -ne 'hardware') { npx --no-install playwright install chromium }
-          if ('${{ matrix.suite }}' -eq 'hardware') {
-            $archive = Join-Path $env:RUNNER_TEMP 'PowerShell-7.5.4-win-x64.zip'
-            $uri = 'https://github.com/PowerShell/PowerShell/releases/download/v7.5.4'
-            Invoke-WebRequest "$uri/PowerShell-7.5.4-win-x64.zip" -OutFile $archive
-            Invoke-WebRequest "$uri/hashes.sha256" -OutFile "$archive.sha256"
-            $expected = (Get-Content "$archive.sha256" | Where-Object { $_ -match '\s\*?PowerShell-7\.5\.4-win-x64\.zip$' }) -split '\s+'
-            if ($expected.Count -ne 2 -or (Get-FileHash $archive).Hash -ine $expected[0]) { throw 'PowerShell checksum mismatch' }
-            $destination = Join-Path $env:RUNNER_TEMP 'powershell-7.5.4'
-            Expand-Archive $archive $destination
-            $destination | Out-File $env:GITHUB_PATH -Append
-          }
+          npx --no-install playwright install chromium
       - name: Run project gates with direct outbound TCP blocked
         run: |
           $ErrorActionPreference = 'Stop'
-          # Dedicated hosted VM has no attached HID and receives no production secrets.
-          if ('${{ matrix.suite }}' -eq 'hardware' -and $PSVersionTable.PSVersion.ToString() -ne '7.5.4') { throw 'Expected PowerShell 7.5.4' }
+          $PSNativeCommandUseErrorActionPreference = $true
+          if ($env:CI_REFUSAL_CASE -eq 'fixture') {
+            node -e "const fs = require('node:fs'); const p = 'tests/fixtures/companion-contract.json'; const f = JSON.parse(fs.readFileSync(p)); const row = f.wire.find(row => row.id === 'pair'); if (row.legacy.status !== 200) throw Error('Unexpected pair status'); row.legacy.status = 599; fs.writeFileSync(p, JSON.stringify(f));"
+          }
+          if ($env:CI_REFUSAL_CASE -eq 'browser') {
+            $env:PLAYWRIGHT_BROWSERS_PATH = Join-Path $env:RUNNER_TEMP ('missing-playwright-' + [guid]::NewGuid())
+            $env:CHROME_PATH = ''
+            if (Test-Path -LiteralPath $env:PLAYWRIGHT_BROWSERS_PATH) { throw 'Refusal browser path already exists' }
+          }
           ./scripts/ci-network.ps1 -Suite '${{ matrix.suite }}'
       - name: Preserve receipts and failure reports
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: windows-${{ matrix.suite }}-evidence
+          name: refusal-${{ matrix.case }}-evidence
           path: test-results/ci/${{ matrix.suite }}/
-          if-no-files-found: error
-          retention-days: 14
-
-  dependencies:
-    name: Advisory and license reports
-    runs-on: windows-2025
-    timeout-minutes: 30
-    env:
-      CI: 'true'
-    steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: '24.19.0'
-      - name: Provision scanners
-        run: |
-          $PSNativeCommandUseErrorActionPreference = $true
-          New-Item -ItemType Directory test-results/ci/dependencies -Force | Out-Null
-          rustup toolchain install 1.100.0 --profile minimal
-          npm ci --ignore-scripts
-          cargo fetch --locked --manifest-path bridge/rust/Cargo.toml
-          $archive = Join-Path $env:RUNNER_TEMP 'cargo-deny-0.20.2.tar.gz'
-          Invoke-WebRequest 'https://github.com/EmbarkStudios/cargo-deny/releases/download/0.20.2/cargo-deny-0.20.2-x86_64-pc-windows-msvc.tar.gz' -OutFile $archive
-          $archiveHash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
-          if ($archiveHash -cne '975a22143262fd27476d19ee00c7af67978426e40e1dee94eed6bbade1cf87dc') { throw 'cargo-deny checksum mismatch' }
-          tar.exe -xzf $archive -C $env:RUNNER_TEMP
-          $scanner = Join-Path $env:RUNNER_TEMP 'cargo-deny-0.20.2-x86_64-pc-windows-msvc'
-          $binary = Join-Path $scanner 'cargo-deny.exe'
-          $version = & $binary --version
-          if ($version -cne 'cargo-deny 0.20.2') { throw 'Unexpected cargo-deny version' }
-          @{version = $version; archiveSha256 = $archiveHash; binarySha256 = (Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash.ToLowerInvariant()} | ConvertTo-Json | Set-Content test-results/ci/dependencies/cargo-deny-tool.json
-          $scanner | Out-File $env:GITHUB_PATH -Append
-      - name: Scan all npm dependencies
-        if: success()
-        run: |
-          $PSNativeCommandUseErrorActionPreference = $false
-          (Get-Date).ToUniversalTime().ToString('o') | Set-Content test-results/ci/dependencies/npm-audit-time.txt
-          npm query '*' > test-results/ci/dependencies/npm-licenses.json
-          if ($LASTEXITCODE -ne 0) { throw 'npm license inventory failed' }
-          npm audit --json > test-results/ci/dependencies/npm-audit.json
-          if ($LASTEXITCODE -ne 0) { throw 'npm advisory scan failed; inspect npm-audit.json' }
-      - name: Scan Rust advisories and licenses
-        if: '!cancelled()'
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $PSNativeCommandUseErrorActionPreference = $true
-          cargo deny --manifest-path bridge/rust/Cargo.toml --locked fetch db
-          (Get-Date).ToUniversalTime().ToString('o') | Set-Content test-results/ci/dependencies/rust-advisory-time.txt
-          $databases = @(Get-ChildItem advisory-db-cache -Directory -Recurse -Force | Where-Object Name -eq '.git')
-          if (!$databases.Count) { throw 'No advisory database checkout found' }
-          $databases | ForEach-Object {
-            git -C $_.Parent.FullName log -1 --format='%H %cI' >> test-results/ci/dependencies/rust-advisory-revisions.txt
-          }
-          cargo deny --manifest-path bridge/rust/Cargo.toml --locked --offline --format json check advisories licenses sources *> test-results/ci/dependencies/cargo-deny.jsonl
-      - name: Preserve dependency reports
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: dependency-reports
-          path: test-results/ci/dependencies/
           if-no-files-found: error
           retention-days: 14

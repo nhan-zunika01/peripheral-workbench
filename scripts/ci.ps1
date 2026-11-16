@@ -11,6 +11,9 @@ function Get-ContractExecutable([string[]]$Rows) {
   })
   if ($artifacts.Count -ne 1) { throw 'Expected exactly one contract-server test artifact' }
   $executable = $artifacts[0].executable
+  if ($env:CI_REFUSAL_CASE -eq 'binary' -and [IO.Path]::GetFileName($executable) -like 'contract_server-*.exe') {
+    $executable = Join-Path $executable 'ci-refusal-missing.exe'
+  }
   if (![IO.Path]::IsPathFullyQualified($executable) -or !(Test-Path -LiteralPath $executable -PathType Leaf)) {
     throw 'Cargo contract-server executable is missing'
   }
