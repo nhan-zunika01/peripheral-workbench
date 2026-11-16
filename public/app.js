@@ -1,15 +1,15 @@
 import { createStore, equal, parseRoute, settingTab, tabs } from './state.js';
 import { createTransport } from './transport.js';
-import { createMacroLibrary } from './macros.js';
+import { createMacroLibrary, createMacroWriter } from './macros.js';
 import { createReviewLedger } from './review.js';
 import { t, setLocale, getLocale, label } from './i18n.js';
 import { el, link, button } from './dom.js';
 import { dashboard, devicePage, settingsPage, syncForms } from './views.js';
 import { catalogPage, keyboardReferencePage, profilesPage, reviewPage } from './project-views.js';
-import { macrosPage } from './macro-view.js';
+import { macrosPage, macroStatusText } from './macro-view.js';
 import { initMotion, moveIndicator, indicatorPosition, feedback } from './motion.js';
 
-const $ = id => document.getElementById(id), store = createStore(), transport = createTransport(), macros = createMacroLibrary(), review = createReviewLedger();
+const $ = id => document.getElementById(id), store = createStore(), transport = createTransport(), macros = createMacroLibrary(undefined, { access: navigator.locks?.request ? 'readonly' : 'memory' }), review = createReviewLedger();
 let initialized = false, menuOpen = false, displayedRoute = '', notification = '', notificationError = false, selectedMacroId = '', selectedMacroEventIndex = -1, macroSearch = '', macroMessage = '', reviewMessage = '';
 setLocale(getLocale());
 const route = () => { const current = parseRoute(location.hash); return tabs.includes(current) && !store.selectedDeviceId ? 'dashboard' : current; };
@@ -21,6 +21,12 @@ const actions = {
   imageChanged: target => feedback(target, 'image'),
   copy: async () => { try { await navigator.clipboard.writeText(`npm run bridge -- --origin ${location.origin}`); notify('copied'); } catch { notify('copyFailed'); } },
   get macroMessage() { return macroMessage; },
+  get canAcquireMacroWriter() { return typeof navigator.locks?.request === 'function'; },
+  acquireMacroWriter: async () => {
+    const replaceDraft = macros.protectedDraft;
+    if (replaceDraft && !await confirmChange('macroReplaceTitle', t('macroReplaceHelp'), 'macroReplaceConfirm')) return;
+    return macroWriter.acquire({ replaceDraft });
+  },
   get reviewMessage() { return reviewMessage; },
   get reviewBlocked() { return hasBlockingUncertainty(); },
   createMacro: () => {
@@ -34,7 +40,6 @@ const actions = {
     if (redraw) render({ restore: restoreId ? { id: restoreId } : null }); else sync();
     return saved;
   },
-  renameMacro: (id, value, restoreId) => actions.updateMacro(id, { name: value.trim() }, true, restoreId),
   setMacroSearch: value => { macroSearch = value; },
   addMacroEvent: (id, kind) => {
     const macro = macros.macros.find(item => item.id === id); if (!macro) return;
@@ -48,11 +53,13 @@ const actions = {
     if (changes.kind) event = changes.kind === 'delay' ? { kind: 'delay', delayMs: current.delayMs } : { kind: changes.kind, input: changes.kind === 'mouse' ? 'left' : '', action: 'down', delayMs: current.delayMs };
     if (actions.updateMacro(id, { events: macro.events.map((item, i) => i === index ? event : item) }, true, restoreId)) selectedMacroEventIndex = index;
   },
-  editMacroEvent: (id, index, changes, control) => {
+  editMacroEvent: (id, index, changes, control, retainInvalid = false) => {
     const macro = macros.macros.find(item => item.id === id); if (!macro?.events[index]) return;
     const saved = actions.updateMacro(id, { events: macro.events.map((item, i) => i === index ? { ...item, ...changes } : item) }, false);
     if (saved) control.removeAttribute('aria-invalid');
-    else { control.value = macro.events[index]?.[Object.keys(changes)[0]] ?? ''; control.setAttribute('aria-invalid', 'true'); }
+    else { if (!retainInvalid) control.value = macro.events[index]?.[Object.keys(changes)[0]] ?? ''; control.setAttribute('aria-invalid', 'true'); }
+    sync();
+    return saved;
   },
   moveMacroEvent: (id, index, delta) => {
     const macro = macros.macros.find(item => item.id === id), target = index + delta;
@@ -90,6 +97,18 @@ const actions = {
   refreshView: () => render(),
   retireUncertain: id => retireUncertain(id)
 };
+const macroWriter = createMacroWriter(macros, { onChange: () => {
+  macroMessage = '';
+  if (!macros.macros.some(m => m.id === selectedMacroId)) { selectedMacroId = ''; selectedMacroEventIndex = -1; }
+  if (route() === 'macros') {
+    const focus = captureFocus(), input = document.activeElement;
+    const selection = ['macro-search', 'macro-name', 'macro-event-input'].includes(input?.id) && typeof input.selectionStart === 'number' ? [input.selectionStart, input.selectionEnd, input.selectionDirection] : null;
+    render({ restore: focus });
+    if (selection) $(focus.id)?.setSelectionRange(...selection);
+  } else if (route() === 'profiles') {
+    const status = $('profile-macro-status'); if (status) status.textContent = t(macros.status);
+  }
+} });
 
 function notify(key, error = false) { notification = key; notificationError = error; sync(); }
 function retiredSettings(deviceId) {
@@ -141,9 +160,11 @@ function sync() {
     if (stale) { const reload = button(t('reload'), actions.refresh); reload.disabled = store.busy; banner.append(reload); }
     else banner.append(link(t('connectionHelp'), '#settings'));
   }
-  const macroStatus = $('macro-status'); if (macroStatus) macroStatus.textContent = t(macros.error || macroMessage || (!macros.valid ? 'macroInvalid' : !macros.persistent ? 'macroMemoryOnly' : 'macroSaved'));
-  const exportButton = document.querySelector('[data-action=export-macros]'); if (exportButton) exportButton.disabled = !macros.valid || macroMessage === 'macroInvalid';
-  const saveMacros = document.querySelector('[data-action=save-macros]'); if (saveMacros) saveMacros.disabled = !macros.valid || !macros.writable;
+  const invalidMacroInput = !!document.querySelector('.macros-page .macro-name[aria-invalid=true], .macros-page [data-event-field][aria-invalid=true]');
+  const macroStatus = $('macro-status');
+  if (macroStatus) macroStatus.textContent = (invalidMacroInput && macroMessage && macroMessage !== 'macroInvalid' ? `${t(macroMessage)} ` : '') + macroStatusText(macros, invalidMacroInput ? 'macroInvalid' : macroMessage);
+  const exportButton = document.querySelector('[data-action=export-macros]'); if (exportButton) exportButton.disabled = !macros.valid || invalidMacroInput || macroMessage === 'macroInvalid';
+  const saveMacros = document.querySelector('[data-action=save-macros]'); if (saveMacros) saveMacros.disabled = !macros.valid || !macros.writable || invalidMacroInput;
   document.querySelectorAll('[data-action=review-read]').forEach(control => { control.disabled = store.busy; });
   const reviewApply = $('review-apply'); if (reviewApply) reviewApply.disabled = !review.pending(store.selectedDeviceId).length || !store.connected || store.busy || store.lockEdits || actions.reviewBlocked;
   syncForms($('view'), store);
@@ -408,4 +429,4 @@ addEventListener('hashchange', () => {
 });
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
 addEventListener('resize', () => { if (innerWidth > 640 && menuOpen) setMenu(false); moveIndicator(); });
-initMotion(); render(); refresh(); setInterval(() => refresh(), 10000);
+initMotion(); render(); macroWriter.acquire(); refresh(); setInterval(() => refresh(), 10000);

@@ -44,11 +44,13 @@ playwright-report/
 !/docs/superpowers/plans/
 /docs/superpowers/plans/*
 !/docs/superpowers/plans/2026-11-13-stability-open-source.md
+!/docs/superpowers/plans/2026-11-16-m1-checklist.md
 !/docs/quality/
 /docs/quality/*
 !/docs/quality/baseline.md
 !/docs/quality/m0-evidence.json
 !/docs/quality/m0-validation.json
+!/docs/quality/m1-validation.json
 !/docs/legal/
 /docs/legal/*
 !/docs/legal/provenance.csv

@@ -1,6 +1,6 @@
 # Roadmap ổn định và mã nguồn mở
 
-Cập nhật ngày 13/11/2026, Asia/Saigon. Phạm vi là Peripheral Workbench trên Windows, bắt đầu với Viper V3 Pro SE `1532:00DE`/`00DF`. Căn cứ: [báo cáo rà soát](audits/2026-11-13-project-audit.md) và [kế hoạch thực hiện](superpowers/plans/2026-11-13-stability-open-source.md).
+Cập nhật ngày 16/11/2026, Asia/Saigon. Phạm vi là Peripheral Workbench trên Windows, bắt đầu với Viper V3 Pro SE `1532:00DE`/`00DF`. Căn cứ: [báo cáo rà soát](audits/2026-11-13-project-audit.md) và [kế hoạch thực hiện](superpowers/plans/2026-11-13-stability-open-source.md).
 
 Thứ tự quyết định: tránh ghi sai thiết bị và mất dữ liệu; phục hồi đúng sau lỗi; vận hành lâu dài có giới hạn tài nguyên; sau đó giảm độ trễ theo số đo. Khối lượng triển khai lớn không phải lý do bỏ một kiểm tra an toàn. Một tính năng chưa có bằng chứng giữ trạng thái experimental hoặc chỉ đọc.
 
@@ -8,10 +8,18 @@ Thứ tự quyết định: tránh ghi sai thiết bị và mất dữ liệu; p
 
 Tiến độ M0 ngày 15/11/2026: đã khóa ghi ở các entrypoint production, launcher và transport của trang web. Ba vòng regression đã tái hiện lỗi rồi sửa; mỗi vòng được theo sau bởi toàn bộ suite đạt. Lượt cuối có 111 test Node, 154 test Rust và 9 test hardware offline, cùng differential, launcher và browser QA. Xem [baseline](quality/baseline.md) và [manifest kiểm chứng M0](quality/m0-validation.json). T01 đã có [danh mục quyền ban đầu](legal/status.md), chưa chọn license. Clone mới từ GitHub đã chạy lại đủ suite trên cùng máy. T00 còn thiếu VM sạch và môi trường cách ly, nên M0 chưa được nghiệm thu hoàn toàn. Các cổng L/C/H/R vẫn chưa đạt; chưa mở ghi phần cứng.
 
-| Cổng | Bằng chứng bắt buộc | Trạng thái ngày rà soát |
+Việc M0 còn mở:
+
+- T00 cần Windows VM sạch, provision bằng toolchain công khai và lockfile, rồi chạy lại suite trong môi trường cách ly. Fresh clone trên máy cũ và cache hiện có chưa đáp ứng điều này.
+- T01 mới mở danh mục quyền. Quyền phân phối và license chính cần chủ thể có quyền quyết định; phần hoàn tất thuộc M2, cổng L vẫn mở.
+- Kết nối GitHub với Cloudflare Workers Builds còn thiếu quyền OAuth/API và chưa xác minh được dashboard. Đây là việc còn lại của lần triển khai M0; deploy thủ công trước đó không chứng minh đã có tự động triển khai.
+
+Tiến độ M1 ngày 16/11/2026: đã thêm CI Windows cho core, browser và hardware offline; pin Node/Rust và tách báo cáo dependency. Macro dùng một writer qua Web Locks, tab còn lại chỉ đọc; thiếu khóa thì sửa trong bộ nhớ. Parser và picker dùng chung trần 32.000.000 byte, có round-trip đủ 100 × 500 event Unicode. Xem [checklist hiện tại](superpowers/plans/2026-11-16-m1-checklist.md) và [bằng chứng M1 cục bộ](quality/m1-validation.json). GitHub Actions, firewall trên hosted runner và required branch checks chưa được xác minh; M1 chưa được nghiệm thu ở hosting.
+
+| Cổng | Bằng chứng bắt buộc | Trạng thái hiện tại |
 | --- | --- | --- |
 | L: mã có giấy phép rõ | Quyền sở hữu, license chính, phạm vi từng thành phần, notices, kiểm gói phân phối | Chưa đạt |
-| C: build/kiểm thử tái lập | Fresh clone; Node/Rust/browser/differential/offline hardware checks có log gắn source hash | Chưa xác minh trong phiên này; chưa có CI trong repo |
+| C: build/kiểm thử tái lập | Fresh clone; Node/Rust/browser/differential/offline hardware checks có log gắn source hash | Có workflow và kiểm chứng cục bộ; còn thiếu hosted CI, required checks và VM sạch/cách ly |
 | S: đọc ổn định | Quá tải hữu hạn, lỗi dữ liệu macro được sửa, crash/reconnect/suspend được kiểm, soak đạt | Chưa đạt |
 | H: ghi được xác minh | Ma trận model/firmware/setting, baseline, write/readback/restore và side effects; ACK ghi đúng giới hạn | Chưa đạt |
 | R: bản phát hành ổn định | L+C+S, H cho mọi setter được bật, benchmark và rollback được review, gói đúng binary | Chưa đạt |

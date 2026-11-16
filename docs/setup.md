@@ -1,6 +1,6 @@
 # Run Peripheral Workbench
 
-Requires Node.js 24 or newer and npm. The default native transport also requires the inspected Synapse 4.0.896 installation at `C:\Program Files\Razer\RazerAppEngine\app-4.0.896`. It uses the installed Electron runtime and `node-rz-hid` module without modifying them. The optional Rust transport below opens HID directly. The companion runs on the Windows computer with the device attached; the browser connects to it directly.
+Requires Node.js 24.x and npm. The tested toolchain is Node 24.19.0 and Rust 1.100.0; `rust-toolchain.toml` pins Rust for local builds and CI. Rust builds also require Visual Studio C++ Build Tools with the Windows SDK. The default native transport requires the inspected Synapse 4.0.896 installation at `C:\Program Files\Razer\RazerAppEngine\app-4.0.896`. It uses the installed Electron runtime and `node-rz-hid` module without modifying them. The optional Rust transport below opens HID directly. The companion runs on the Windows computer with the device attached; the browser connects to it directly.
 
 ## Start locally
 
@@ -20,6 +20,20 @@ npm run bridge -- --origin http://127.0.0.1:8787
 ```
 
 The default bridge origin is `http://127.0.0.1:8787`; `UI_ORIGIN` remains supported. CLI `--origin` takes precedence. The page displays and copies the exact command for its current origin. Browser JavaScript cannot start a Windows process: if the companion is unreachable, run that command locally. If it is running, check the browser's local network permission. No token entry is needed.
+
+## Continuous checks
+
+The Windows workflow in `.github/workflows/ci.yml` separates core, browser and offline hardware checks. Install locked npm/Cargo dependencies and Chromium before running these gates. From PowerShell 7.5 or newer:
+
+```powershell
+./scripts/ci.ps1 -Suite core
+./scripts/ci.ps1 -Suite browser
+./scripts/ci.ps1 -Suite hardware
+```
+
+Each run needs a new output directory; use `-Output` when repeating a suite. Receipts include source hashes and command exit codes, and failed runs retain their logs. The browser suite includes two-tab macro storage and the large backup picker checks. Hardware tests use synthetic data and local HTTP fixtures.
+
+The workflow provisions tools before blocking outbound traffic for the project gates. Advisory and dependency-license reports run separately with network access. Those reports do not settle application ownership or select its license. GitHub execution and required branch checks need separate hosting verification; adding the workflow does not enable branch protection.
 
 ## Discovery and selection
 
@@ -43,11 +57,17 @@ Successful operations are not replayed when another operation fails. A timeout r
 
 ## Macros, profiles and reference layouts
 
-**Macros** edits data-only browser drafts: create, rename, delete, and edit ordered keyboard, mouse and standalone delay events. Import/export uses the app's version-1 JSON format, not Synapse's native macro format. Limits are 100 macros, 500 events per macro, 60,000 ms per delay and a 1 MB import. Launch, shell commands and unsupported event shapes are rejected. Import never executes events.
+**Macros** edits data-only browser drafts: create, rename, delete, and edit ordered keyboard, mouse and standalone delay events. Import/export uses the app's version-1 JSON format, not Synapse's native macro format. Limits are 100 macros, 500 events per macro, 60,000 ms per delay and a 32,000,000-byte import. The file picker and parser use the same byte limit. A backup can include the full library, including escaped Unicode. Launch, shell commands and unsupported event shapes are rejected. Import never executes events.
 
 Use the library search to choose a macro, then select an event in the center sequence and edit its fields in Event details. Insert adds an event; Move up/down changes order without changing values. Arrow Up/Down selects an event and Alt+Arrow Up/Down moves it. Duplicate creates an independent macro with a new identity. The phone library picker can be opened or closed with its summary, and background device reads do not close menus or replace the local editor.
 
-Drafts autosave to localStorage for the current browser and origin. Save explicitly retries a failed write; an unreadable or corrupt store is never overwritten. Export JSON to move drafts to another browser/origin or keep a backup. A storage failure leaves the library in memory with a visible warning, including when no macro is selected. Recording, playback, input injection, device assignment and onboard macro storage are unavailable until a verified runtime/adapter exists.
+One tab holds permission to autosave drafts to localStorage for the current browser and origin, using an exclusive Web Lock. Other tabs show a read-only library and receive saved updates. Close the editing tab, then use the permission retry control in another tab; it reloads the saved library before editing. Export JSON to keep a backup or move drafts to another browser/origin.
+
+Without Web Locks, edits remain in memory and must be exported. A failed storage write keeps the draft in memory and leaves the previous stored library intact; Save retries the write. An unreadable or corrupt store is never overwritten. The status message distinguishes these conditions from saved data. Recording, playback, input injection, device assignment and onboard macro storage are unavailable until a verified runtime/adapter exists.
+
+Export keeps an unsaved draft protected even if the download fails or is cancelled. When retrying editing access with such a draft, the app asks before replacing it with the saved browser library. Confirm only after keeping the backup you need. The replacement happens after receiving the lock and reading valid storage; a failed read keeps the draft. Updates from another tab preserve search focus and do not replace unrelated settings controls.
+
+Valid name and delay edits update the draft while typing, without waiting for blur. Invalid input shows an error and does not write an invalid library. If reading storage failed and later recovers, retry checks storage again; an unsaved draft still requires the replacement decision above.
 
 **Profiles** exposes only runtime-provided controls and distinguishes host from onboard storage. **Device families** includes a labelled keyboard reference and other family capability references. These do not add devices to inventory or enable unsupported controls. No host profile engine or additional hardware adapter is implied.
 
