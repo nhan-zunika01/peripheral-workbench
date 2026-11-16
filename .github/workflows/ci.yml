@@ -52,20 +52,12 @@ jobs:
             Expand-Archive $archive $destination
             $destination | Out-File $env:GITHUB_PATH -Append
           }
-      - name: Run project gates without outbound network
+      - name: Run project gates with direct outbound TCP blocked
         run: |
           $ErrorActionPreference = 'Stop'
           # Dedicated hosted VM has no attached HID and receives no production secrets.
-          $profiles = Get-NetFirewallProfile
-          Set-NetFirewallProfile -Profile Domain,Private,Public -Enabled True
-          $rule = New-NetFirewallRule -DisplayName 'Peripheral CI offline phase' -Direction Outbound -Action Block -RemoteAddress Any
-          try {
-            if ('${{ matrix.suite }}' -eq 'hardware' -and $PSVersionTable.PSVersion.ToString() -ne '7.5.4') { throw 'Expected PowerShell 7.5.4' }
-            ./scripts/ci.ps1 -Suite '${{ matrix.suite }}'
-          } finally {
-            $rule | Remove-NetFirewallRule
-            $profiles | ForEach-Object { Set-NetFirewallProfile -Profile $_.Name -Enabled $_.Enabled }
-          }
+          if ('${{ matrix.suite }}' -eq 'hardware' -and $PSVersionTable.PSVersion.ToString() -ne '7.5.4') { throw 'Expected PowerShell 7.5.4' }
+          ./scripts/ci-network.ps1 -Suite '${{ matrix.suite }}'
       - name: Preserve receipts and failure reports
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -95,7 +87,17 @@ jobs:
           rustup toolchain install 1.100.0 --profile minimal
           npm ci --ignore-scripts
           cargo fetch --locked --manifest-path bridge/rust/Cargo.toml
-          cargo install cargo-deny --version 0.18.4 --locked
+          $archive = Join-Path $env:RUNNER_TEMP 'cargo-deny-0.20.2.tar.gz'
+          Invoke-WebRequest 'https://github.com/EmbarkStudios/cargo-deny/releases/download/0.20.2/cargo-deny-0.20.2-x86_64-pc-windows-msvc.tar.gz' -OutFile $archive
+          $archiveHash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($archiveHash -cne '975a22143262fd27476d19ee00c7af67978426e40e1dee94eed6bbade1cf87dc') { throw 'cargo-deny checksum mismatch' }
+          tar.exe -xzf $archive -C $env:RUNNER_TEMP
+          $scanner = Join-Path $env:RUNNER_TEMP 'cargo-deny-0.20.2-x86_64-pc-windows-msvc'
+          $binary = Join-Path $scanner 'cargo-deny.exe'
+          $version = & $binary --version
+          if ($version -cne 'cargo-deny 0.20.2') { throw 'Unexpected cargo-deny version' }
+          @{version = $version; archiveSha256 = $archiveHash; binarySha256 = (Get-FileHash -LiteralPath $binary -Algorithm SHA256).Hash.ToLowerInvariant()} | ConvertTo-Json | Set-Content test-results/ci/dependencies/cargo-deny-tool.json
+          $scanner | Out-File $env:GITHUB_PATH -Append
       - name: Scan all npm dependencies
         if: success()
         run: |
@@ -110,12 +112,14 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
-          cargo deny --manifest-path bridge/rust/Cargo.toml fetch
+          cargo deny --manifest-path bridge/rust/Cargo.toml --locked fetch db
           (Get-Date).ToUniversalTime().ToString('o') | Set-Content test-results/ci/dependencies/rust-advisory-time.txt
-          Get-ChildItem advisory-db-cache -Directory -Recurse -Force | Where-Object Name -eq '.git' | ForEach-Object {
+          $databases = @(Get-ChildItem advisory-db-cache -Directory -Recurse -Force | Where-Object Name -eq '.git')
+          if (!$databases.Count) { throw 'No advisory database checkout found' }
+          $databases | ForEach-Object {
             git -C $_.Parent.FullName log -1 --format='%H %cI' >> test-results/ci/dependencies/rust-advisory-revisions.txt
           }
-          cargo deny --manifest-path bridge/rust/Cargo.toml --locked --format json check --disable-fetch advisories licenses sources *> test-results/ci/dependencies/cargo-deny.jsonl
+          cargo deny --manifest-path bridge/rust/Cargo.toml --locked --offline --format json check advisories licenses sources *> test-results/ci/dependencies/cargo-deny.jsonl
       - name: Preserve dependency reports
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

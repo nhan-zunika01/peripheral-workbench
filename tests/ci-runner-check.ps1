@@ -96,3 +96,4 @@ try {
   } finally { Pop-Location }
 } finally { Remove-Item -LiteralPath $temp -Recurse -Force }
 Write-Output 'PASS Cargo artifact, command, source evidence, and version metadata gates'
+& "$PSScriptRoot/ci-network-check.ps1"
