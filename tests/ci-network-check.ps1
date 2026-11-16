@@ -40,6 +40,12 @@ function Disable-NetFirewallRule {
 function New-NetFirewallRule {
   param($Name, $DisplayName, $Direction, $Action, $Program, $Service, $RemoteAddress, $Profile)
   $script:events.Add('add-rule')
+  if ($RemoteAddress -contains '::1') { throw 'An unspecified, multicast, broadcast, or loopback IPv6 address was specified.' }
+  if ($Name -like '*-loopback') {
+    $addresses = @($RemoteAddress)
+    if ($addresses.Count -ne 1 -or $addresses[0] -ne '127.0.0.0/8') { throw 'Expected the IPv4 loopback allow rule' }
+    $script:events.Add('loopback-allow')
+  }
   $script:rules[$Name] = [pscustomobject]@{ Name = $Name; Direction = $Direction; Action = $Action; Enabled = 'True' }
   $script:rules[$Name]
 }
@@ -82,8 +88,9 @@ function Run-Scenario([string]$Name, [string]$Failure, [bool]$ExpectedSuccess) {
   $script:rules = @{ existing = [pscustomobject]@{ Name = 'existing'; Direction = 'Outbound'; Action = 'Allow'; Enabled = 'True' } }
   $output = Join-Path $testRoot $Name
   $failed = $false
-  try { Invoke-CINetwork -Suite core -Output $output 6>$null } catch { $failed = $true }
-  if ($failed -eq $ExpectedSuccess) { throw "Scenario $Name returned an unexpected result" }
+  $failureMessage = ''
+  try { Invoke-CINetwork -Suite core -Output $output 6>$null } catch { $failed = $true; $failureMessage = $_.Exception.Message }
+  if ($failed -eq $ExpectedSuccess) { throw "Scenario $Name returned an unexpected result: $failureMessage" }
   if ($Failure -in @('export', 'baseline')) {
     if ($script:events.Contains('add-rule') -or $script:events.Contains('disable-rule') -or $script:events.Contains('set-profile')) { throw 'Policy changed after export failure' }
     return
@@ -94,7 +101,7 @@ function Run-Scenario([string]$Name, [string]$Failure, [bool]$ExpectedSuccess) {
   if ($ExpectedSuccess) {
     $proof = Get-Content -LiteralPath (Join-Path $output 'network-proof.json') -Raw | ConvertFrom-Json
     if (!$proof.restored -or !$proof.before.connected -or $proof.blocked.connected -or !$proof.blocked.loopback -or !$proof.after.connected -or !$proof.sources.probe) { throw 'Network proof is incomplete' }
-    if ($script:events.IndexOf('netsh-export') -gt $script:events.IndexOf('add-rule') -or $script:events.IndexOf('probe-blocked') -gt $script:events.IndexOf('gates') -or $script:events.IndexOf('gates') -gt $script:events.IndexOf('netsh-import')) { throw 'Network operations occurred out of order' }
+    if (!$script:events.Contains('loopback-allow') -or $script:events.IndexOf('netsh-export') -gt $script:events.IndexOf('add-rule') -or $script:events.IndexOf('probe-blocked') -gt $script:events.IndexOf('gates') -or $script:events.IndexOf('gates') -gt $script:events.IndexOf('netsh-import')) { throw 'Network operations occurred out of order' }
   }
 }
 

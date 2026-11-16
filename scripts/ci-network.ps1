@@ -93,7 +93,7 @@ function Invoke-CINetwork([string]$Suite, [string]$Output) {
       $name = "$prefix-dns"; $allowNames.Add($name)
       New-NetFirewallRule -Name $name -DisplayName $name -Direction Outbound -Action Allow -Profile Any -Service Dnscache | Out-Null
       $name = "$prefix-loopback"; $allowNames.Add($name)
-      New-NetFirewallRule -Name $name -DisplayName $name -Direction Outbound -Action Allow -Profile Any -RemoteAddress @('127.0.0.0/8', '::1') | Out-Null
+      New-NetFirewallRule -Name $name -DisplayName $name -Direction Outbound -Action Allow -Profile Any -RemoteAddress '127.0.0.0/8' | Out-Null
       if ($existing.Count) { $existing | Disable-NetFirewallRule }
       Set-NetFirewallProfile -Profile Domain,Private,Public -Enabled True -DefaultOutboundAction Block
       $active = @(Get-NetFirewallRule -PolicyStore ActiveStore -Direction Outbound -Action Allow -Enabled True)
