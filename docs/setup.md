@@ -35,7 +35,7 @@ Each run needs a new output directory; use `-Output` when repeating a suite. Rec
 
 The workflow provisions tools, then uses `scripts/ci-network.ps1` only on GitHub-hosted Windows runners. It verifies direct TCP access before the policy, denies it during the project gates while keeping loopback available, then restores the original firewall policy and verifies access again. DNS and runner control traffic remain allowed; this is not a fully disconnected VM. Local commands above use `ci.ps1` without changing the host firewall. Advisory and dependency-license reports run separately with network access using checksum-pinned cargo-deny 0.20.2. Those reports do not settle application ownership or select its license.
 
-Hosted acceptance and three expected-failure refusal cases are recorded in [the M1 manifest](quality/m1-validation.json). The `main` branch requires Windows core, browser, hardware and dependency checks, strict and including administrators. The candidate is [PR #1](https://github.com/nhan-zunika01/peripheral-workbench/pull/1); the refusal cases live on a separate test branch and cannot satisfy those positive checks.
+Hosted acceptance and three expected-failure refusal cases are recorded in [the M1 manifest](quality/m1-validation.json). The `main` branch requires Windows core, browser, hardware and dependency checks, strict and including administrators. [PR #1](https://github.com/nhan-zunika01/peripheral-workbench/pull/1) was merged into `main` at `52cd1a063334d08180f8b555fbb62c23f081771f`; the [main CI run](https://github.com/nhan-zunika01/peripheral-workbench/actions/runs/43913838429) passed all four jobs. The refusal cases live on a separate test branch and cannot satisfy those positive checks.
 
 ## Discovery and selection
 
@@ -77,7 +77,7 @@ Valid name and delay edits update the draft while typing, without waiting for bl
 
 ## Deploy the interface
 
-Current deployment: [peripheral.zhkxt.id.vn](https://peripheral.zhkxt.id.vn), deployed from source commit `835f439` using Wrangler. All 23 public asset hashes matched the tested source. GitHub automatic deployment is not connected: the current OAuth lacks Workers Builds access and dashboard access could not be verified by the browser tool. The steps below describe the remaining connection; they are not a claim that it is configured.
+Current deployment: [peripheral.zhkxt.id.vn](https://peripheral.zhkxt.id.vn), deployed from source commit `835f439` using Wrangler. All 23 public asset hashes matched the tested source. M1 has not been deployed. GitHub automatic deployment is not connected: the current OAuth lacks Workers Builds access and dashboard access could not be verified by the browser tool. The steps below describe the remaining connection; they are not a claim that it is configured.
 
 ```powershell
 npm test

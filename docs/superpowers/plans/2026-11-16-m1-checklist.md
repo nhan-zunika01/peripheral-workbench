@@ -1,6 +1,6 @@
 # Checklist tiến độ M1
 
-Trạng thái ngày 16/11/2026, sau GREEN5, review độc lập và kiểm chứng hosted CI. M1 gồm T03, T07 và T08 theo [roadmap](../../roadmap.md) và kế hoạch gốc `2026-11-13-stability-open-source.md`. Dấu đã chọn ghi phần có bằng chứng, không đồng nghĩa toàn bộ chặng đã nghiệm thu. Các đường dẫn `test-results/` và `.superpowers/` là bằng chứng cục bộ bị Git bỏ qua.
+Trạng thái ngày 17/11/2026, sau GREEN5, review độc lập, kiểm chứng hosted CI và merge PR #1 vào `main`. M1 gồm T03, T07 và T08 theo [roadmap](../../roadmap.md) và kế hoạch gốc `2026-11-13-stability-open-source.md`. Dấu đã chọn ghi phần có bằng chứng, không đồng nghĩa toàn bộ chặng đã nghiệm thu. Các đường dẫn `test-results/` và `.superpowers/` là bằng chứng cục bộ bị Git bỏ qua.
 
 ## M0 và các việc còn mở
 
@@ -10,6 +10,7 @@ Trạng thái ngày 16/11/2026, sau GREEN5, review độc lập và kiểm chứ
 - [ ] Hoàn tất T01 thuộc M2: xác nhận tác giả, nguồn và quyền phân phối, chọn license với chủ thể có quyền, kiểm dependency và gói thực tế. Danh mục hiện mới là bước mở: [tình trạng quyền](../../legal/status.md), `docs/legal/provenance.csv`. Cổng L chưa đạt.
 - [ ] Theo dõi triển khai: Workers Builds kết nối GitHub chưa được kiểm chứng. Lượt M0 đã gặp lỗi OAuth/API và dashboard; M1 không thực hiện deployment.
 - [ ] Theo roadmap, đo hiệu suất thuộc T05/T09; kiểm thiết bị thật và soak thuộc T10. Các việc này chưa có bằng chứng nghiệm thu và không được tính là phần đã hoàn tất của M0.
+- [ ] Xác minh trình duyệt thực sự đưa trang vào BFCache. Các ca mô phỏng lifecycle và điều hướng quay lại đã chạy, nhưng headless Chromium chưa chứng minh được điều này.
 
 ## T03: CI
 
@@ -40,11 +41,11 @@ Trạng thái ngày 16/11/2026, sau GREEN5, review độc lập và kiểm chứ
 - [x] GREEN0–GREEN5 đều có 14/14 phase PASS, `sourceStable` và `snapshotStable` đều true. Node lần lượt 117/118/118/121/123/123; Rust 154 và hardware offline 9 mỗi lượt; macro browser 8/9/10/12/15/15. GREEN3 dùng receipt `test-results/m1/GREEN3-retry/receipt.json`; các lượt khác dùng thư mục cùng tên.
 - [x] Đã hoàn tất năm vòng tìm lỗi thật, viết regression đỏ trước sửa và chạy lại toàn bộ suite sau mỗi vòng; mọi test phát sinh được giữ trong suite. Lỗi thiết lập Git của snapshot ở lượt GREEN3 đầu được giữ log; full retry dùng cùng hash nguồn, không bỏ gate.
 - [x] Review độc lập về đặc tả và tiêu chuẩn đã đóng các phát hiện sau kiểm lại. Receipt review: `test-results/m1/review-final.json`. Bằng chứng công khai, source hash và giới hạn: [manifest M1](../../quality/m1-validation.json).
-- [ ] Review/merge PR #1 để đưa M1 vào nhánh chính. Mã và điều kiện chức năng M1 đã được kiểm chứng; T00 cách ly hoàn toàn, cổng L, phần cứng/soak/performance và stable release vẫn là các việc riêng còn mở.
+- [x] Đã review và merge [PR #1](https://github.com/nhan-zunika01/peripheral-workbench/pull/1) vào `main` tại `52cd1a063334d08180f8b555fbb62c23f081771f`. [CI trên main](https://github.com/nhan-zunika01/peripheral-workbench/actions/runs/43913838429) đạt 4/4 job. T00 cách ly hoàn toàn, cổng L, phần cứng, soak và hiệu suất vẫn còn mở. Source/alpha cần L+C; stable release cần cổng R.
 
 ## Kiểm chứng hosted
 
 - [x] Hosted đạt 125 Node, 154 Rust, 134 contract, 4 launcher, 15 macro browser, 13 QA, 21 UI và 9 hardware offline; source và log hashes được kiểm lại từ artifact.
 - [x] Đã sửa lỗi context YAML cấp job, scanner cũ không đọc CVSS 4, và rule IPv6 loopback không được Windows chấp nhận. cargo-deny 0.20.2 đã pin checksum; npm báo 0 vulnerability, Rust không có lỗi advisory/license/source, chỉ cảnh báo ISC allowance không dùng.
 - [x] Nhánh kiểm thử `codex/m1-ci-negative-proof` tạo ba lỗi chủ đích để chứng minh CI từ chối. Đây là acceptance proof, không tính vào năm vòng regression thật.
-- [ ] PR chưa merge; website và companion production chưa được triển khai từ M1.
+- [ ] Website chưa được triển khai từ M1; trạng thái merge không thay đổi bản website đang chạy.

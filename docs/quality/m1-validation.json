@@ -2739,10 +2739,56 @@
     "pullRequest": "https://github.com/nhan-zunika01/peripheral-workbench/pull/1",
     "branch": "codex/m1-data-ci",
     "programCommit": "e66421586b889777332f08810e0ed335396f64f0",
-    "merged": false,
+    "merged": true,
+    "mergeCommit": "52cd1a063334d08180f8b555fbb62c23f081771f",
     "deployed": false,
     "negativeBranch": "codex/m1-ci-negative-proof",
     "negativeBranchIsNotTheCandidate": true
+  },
+  "mainIntegration": {
+    "pullRequest": "https://github.com/nhan-zunika01/peripheral-workbench/pull/1",
+    "headBefore": "cb0fb54d3343ab5539377107fb060bcef3408298",
+    "baseBefore": "1f80cce47e5bb989acf6da4080de9cf3d2569688",
+    "mergeCommit": "52cd1a063334d08180f8b555fbb62c23f081771f",
+    "mergeMethod": "merge",
+    "mergedAtUtc": "2026-11-16T17:01:06Z",
+    "mergedDateAsiaSaigon": "2026-11-17",
+    "tree": "fa0dbff90bbb3e9b1c3dc047e46ccbc2557d5a3d",
+    "mainCi": {
+      "id": 43913838429,
+      "head": "52cd1a063334d08180f8b555fbb62c23f081771f",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/nhan-zunika01/peripheral-workbench/actions/runs/43913838429",
+      "jobs": [
+        {
+          "id": 133462563073,
+          "name": "Windows hardware",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 133462563670,
+          "name": "Windows core",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 133462564201,
+          "name": "Windows browser",
+          "status": "completed",
+          "conclusion": "success"
+        },
+        {
+          "id": 133462564501,
+          "name": "Advisory and license reports",
+          "status": "completed",
+          "conclusion": "success"
+        }
+      ]
+    },
+    "ciEvidenceScope": "Run and job conclusions on the merge commit. The earlier hosted artifact and source audit is recorded separately in hostedValidation.",
+    "deploymentPerformed": false
   },
   "limitations": [
     "The CI firewall proves direct project TCP denial with loopback available; DNS and runner control traffic remain allowed. Full disconnected Windows VM acceptance under T00 remains open.",
@@ -2750,7 +2796,7 @@
     "No physical hardware readback/restore, setter approval, soak, or application performance benchmark was performed. Hardware writes remain disabled.",
     "Real BFCache admission was not established in the headless browser; simulated lifecycle and actual back navigation are covered.",
     "Build/scanner binaries were not uploaded as evidence; artifact verification checks recorded hashes, not independent reconstruction of those binaries.",
-    "The candidate is a pull request; main has not been merged and no deployment was performed."
+    "M1 has not been deployed to the website."
   ],
   "hostedRegressionHistory": [
     {
