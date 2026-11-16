@@ -10,16 +10,16 @@ Tiến độ M0 ngày 15/11/2026: đã khóa ghi ở các entrypoint production,
 
 Việc M0 còn mở:
 
-- T00 cần Windows VM sạch, provision bằng toolchain công khai và lockfile, rồi chạy lại suite trong môi trường cách ly. Fresh clone trên máy cũ và cache hiện có chưa đáp ứng điều này.
+- T00 đã có runner Windows 2025 mới, provision theo lockfile và toolchain công khai, với log/hash nguồn. Còn thiếu môi trường Windows ngắt mạng hoàn toàn: policy CI đã chứng minh chặn TCP trực tiếp của project, nhưng vẫn cho DNS và kênh điều khiển runner hoạt động.
 - T01 mới mở danh mục quyền. Quyền phân phối và license chính cần chủ thể có quyền quyết định; phần hoàn tất thuộc M2, cổng L vẫn mở.
-- Kết nối GitHub với Cloudflare Workers Builds còn thiếu quyền OAuth/API và chưa xác minh được dashboard. Đây là việc còn lại của lần triển khai M0; deploy thủ công trước đó không chứng minh đã có tự động triển khai.
+- Kết nối GitHub với Cloudflare Workers Builds chưa được kiểm chứng. Lượt M0 đã gặp lỗi quyền OAuth/API và chưa xác minh được dashboard; M1 chưa xử lý phần triển khai này. Deploy thủ công trước đó không chứng minh đã có tự động triển khai.
 
-Tiến độ M1 ngày 16/11/2026: đã thêm CI Windows cho core, browser và hardware offline; pin Node/Rust và tách báo cáo dependency. Macro dùng một writer qua Web Locks, tab còn lại chỉ đọc; thiếu khóa thì sửa trong bộ nhớ. Parser và picker dùng chung trần 32.000.000 byte, có round-trip đủ 100 × 500 event Unicode. Xem [checklist hiện tại](superpowers/plans/2026-11-16-m1-checklist.md) và [bằng chứng M1 cục bộ](quality/m1-validation.json). GitHub Actions, firewall trên hosted runner và required branch checks chưa được xác minh; M1 chưa được nghiệm thu ở hosting.
+Tiến độ M1 ngày 16/11/2026: mã và kiểm thử ở [PR #1](https://github.com/nhan-zunika01/peripheral-workbench/pull/1). CI hosted đã đạt đủ core, browser, hardware offline và báo cáo dependency; cả 168 hash nguồn trong từng suite khớp Git tree. Ba ca chủ đích fixture sai, thiếu test binary và thiếu browser đều bị từ chối ở đúng gate. `main` yêu cầu đủ bốn checks, strict và áp dụng cả admin. Macro dùng một writer qua Web Locks, giữ draft chưa lưu trong RAM và round-trip đủ 100 × 500 event Unicode qua trần 32.000.000 byte. Xem [checklist](superpowers/plans/2026-11-16-m1-checklist.md) và [bằng chứng M1](quality/m1-validation.json). Policy hosted chặn TCP trực tiếp, giữ loopback, DNS và runner control; chưa chứng minh cách ly mạng hoàn toàn của T00. PR chưa merge, chưa triển khai M1.
 
 | Cổng | Bằng chứng bắt buộc | Trạng thái hiện tại |
 | --- | --- | --- |
 | L: mã có giấy phép rõ | Quyền sở hữu, license chính, phạm vi từng thành phần, notices, kiểm gói phân phối | Chưa đạt |
-| C: build/kiểm thử tái lập | Fresh clone; Node/Rust/browser/differential/offline hardware checks có log gắn source hash | Có workflow và kiểm chứng cục bộ; còn thiếu hosted CI, required checks và VM sạch/cách ly |
+| C: build/kiểm thử tái lập | Fresh clone; Node/Rust/browser/differential/offline hardware checks có log gắn source hash | Hosted CI, artifact/source hash và required checks đã kiểm; còn thiếu cách ly Windows hoàn toàn của T00 |
 | S: đọc ổn định | Quá tải hữu hạn, lỗi dữ liệu macro được sửa, crash/reconnect/suspend được kiểm, soak đạt | Chưa đạt |
 | H: ghi được xác minh | Ma trận model/firmware/setting, baseline, write/readback/restore và side effects; ACK ghi đúng giới hạn | Chưa đạt |
 | R: bản phát hành ổn định | L+C+S, H cho mọi setter được bật, benchmark và rollback được review, gói đúng binary | Chưa đạt |

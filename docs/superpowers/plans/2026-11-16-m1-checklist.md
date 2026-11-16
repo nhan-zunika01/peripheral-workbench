@@ -1,13 +1,14 @@
 # Checklist tiến độ M1
 
-Trạng thái ngày 16/11/2026, sau GREEN5 và review độc lập. M1 gồm T03, T07 và T08 theo [roadmap](../../roadmap.md) và kế hoạch gốc `2026-11-13-stability-open-source.md`. Dấu đã chọn ghi phần có bằng chứng, không đồng nghĩa toàn bộ chặng đã nghiệm thu. Các đường dẫn `test-results/` và `.superpowers/` là bằng chứng cục bộ bị Git bỏ qua.
+Trạng thái ngày 16/11/2026, sau GREEN5, review độc lập và kiểm chứng hosted CI. M1 gồm T03, T07 và T08 theo [roadmap](../../roadmap.md) và kế hoạch gốc `2026-11-13-stability-open-source.md`. Dấu đã chọn ghi phần có bằng chứng, không đồng nghĩa toàn bộ chặng đã nghiệm thu. Các đường dẫn `test-results/` và `.superpowers/` là bằng chứng cục bộ bị Git bỏ qua.
 
 ## M0 và các việc còn mở
 
 - [x] Đã khóa các đường ghi production chưa được kiểm chứng; baseline và lượt clone mới chạy lại trên cùng máy được ghi tại [baseline T00](../../quality/baseline.md) và `docs/quality/m0-validation.json`.
-- [ ] Dựng Windows VM sạch, provision từ lockfile rồi cách ly mạng ở cấp hệ điều hành và chạy lại suite. Bằng chứng trên cùng máy và cache hiện có chưa hoàn tất nghiệm thu T00 hoặc cổng C.
+- [x] Runner Windows 2025 mới đã provision từ lockfile và chạy đủ suite; artifact và 168 hash nguồn khớp Git blobs. Xem `hostedValidation` trong manifest M1.
+- [ ] Hoàn tất T00 trong môi trường Windows ngắt mạng hoàn toàn. CI hiện chứng minh chặn TCP trực tiếp của project và giữ loopback; DNS cùng runner control vẫn được phép. Host cục bộ là Windows Home, chưa có guest Windows dùng được; không thay đổi feature/firewall của máy này.
 - [ ] Hoàn tất T01 thuộc M2: xác nhận tác giả, nguồn và quyền phân phối, chọn license với chủ thể có quyền, kiểm dependency và gói thực tế. Danh mục hiện mới là bước mở: [tình trạng quyền](../../legal/status.md), `docs/legal/provenance.csv`. Cổng L chưa đạt.
-- [ ] Theo dõi triển khai: cấu hình Workers Builds kết nối GitHub khi có đủ quyền. OAuth/API hiện bị từ chối và phiên dashboard chưa được xác minh; deployment trực tiếp trước đó không chứng minh tích hợp GitHub hoạt động. Xem `docs/quality/baseline.md` và `.superpowers/sdd/2026-11-13-stability-open-source/progress.md`.
+- [ ] Theo dõi triển khai: Workers Builds kết nối GitHub chưa được kiểm chứng. Lượt M0 đã gặp lỗi OAuth/API và dashboard; M1 không thực hiện deployment.
 - [ ] Theo roadmap, đo hiệu suất thuộc T05/T09; kiểm thiết bị thật và soak thuộc T10. Các việc này chưa có bằng chứng nghiệm thu và không được tính là phần đã hoàn tất của M0.
 
 ## T03: CI
@@ -15,8 +16,8 @@ Trạng thái ngày 16/11/2026, sau GREEN5 và review độc lập. M1 gồm T03
 - [x] Đã tích hợp workflow Windows cho core, browser, hardware offline và job báo cáo dependency; toolchain khai báo Node 24.19.0 và Rust 1.100.0. Xem `.github/workflows/ci.yml`, `rust-toolchain.toml`, `scripts/ci.ps1`.
 - [x] Các lượt kiểm cục bộ đã chạy Node, Rust, build, differential, launcher, browser và hardware offline. Ba suite CI wrapper có receipt trong `test-results/m1/ci-smoke/`.
 - [x] Git và lệnh version lỗi hoặc trả rỗng bị từ chối trước khi tạo receipt. Regression CI đạt trong GREEN3, GREEN4 và GREEN5; wrapper hardware cuối có 9/9 test và `sourceStable:true` tại `test-results/m1/ci-final/hardware-r5/receipt.json`.
-- [ ] Chạy workflow trên GitHub Actions và kiểm từng job, artifact cùng việc fixture sai hoặc binary/browser thiếu làm job thất bại. Xác minh required checks trong cấu hình bảo vệ nhánh; YAML tự nó không chứng minh các kiểm tra đã được bật hay đã đạt.
-- [ ] Xác minh bước hardware trên hosted runner dùng PowerShell 7.5.4 và lớp chặn mạng thực sự hoạt động. Các receipt hiện có dùng PowerShell 7.6.9 cục bộ, chưa xác minh workflow trực tiếp.
+- [x] Hosted CI đạt 4/4 job trên PR #1 và push. Ba ca fixture sai, binary thiếu, browser thiếu đều fail đúng gate với artifact và khôi phục firewall. `main` có bốn required checks, strict và áp dụng cả admin. Xem `hostedValidation`, `hostedRefusalProof` và `branchProtection` trong manifest.
+- [x] Hardware offline đạt 9/9 trên PowerShell 7.5.4; policy/probe hosted chứng minh TCP trước/sau hoạt động, TCP trực tiếp bị chặn trong gate, loopback hoạt động và firewall được phục hồi.
 
 ## T07: một writer macro
 
@@ -39,4 +40,11 @@ Trạng thái ngày 16/11/2026, sau GREEN5 và review độc lập. M1 gồm T03
 - [x] GREEN0–GREEN5 đều có 14/14 phase PASS, `sourceStable` và `snapshotStable` đều true. Node lần lượt 117/118/118/121/123/123; Rust 154 và hardware offline 9 mỗi lượt; macro browser 8/9/10/12/15/15. GREEN3 dùng receipt `test-results/m1/GREEN3-retry/receipt.json`; các lượt khác dùng thư mục cùng tên.
 - [x] Đã hoàn tất năm vòng tìm lỗi thật, viết regression đỏ trước sửa và chạy lại toàn bộ suite sau mỗi vòng; mọi test phát sinh được giữ trong suite. Lỗi thiết lập Git của snapshot ở lượt GREEN3 đầu được giữ log; full retry dùng cùng hash nguồn, không bỏ gate.
 - [x] Review độc lập về đặc tả và tiêu chuẩn đã đóng các phát hiện sau kiểm lại. Receipt review: `test-results/m1/review-final.json`. Bằng chứng công khai, source hash và giới hạn: [manifest M1](../../quality/m1-validation.json).
-- [ ] Nghiệm thu M1 khi T03, T07, T08 và các bằng chứng còn thiếu đạt. Tình trạng CI hosted, cổng L/C và các hạng mục phần cứng vẫn phải được xác minh riêng.
+- [ ] Review/merge PR #1 để đưa M1 vào nhánh chính. Mã và điều kiện chức năng M1 đã được kiểm chứng; T00 cách ly hoàn toàn, cổng L, phần cứng/soak/performance và stable release vẫn là các việc riêng còn mở.
+
+## Kiểm chứng hosted
+
+- [x] Hosted đạt 125 Node, 154 Rust, 134 contract, 4 launcher, 15 macro browser, 13 QA, 21 UI và 9 hardware offline; source và log hashes được kiểm lại từ artifact.
+- [x] Đã sửa lỗi context YAML cấp job, scanner cũ không đọc CVSS 4, và rule IPv6 loopback không được Windows chấp nhận. cargo-deny 0.20.2 đã pin checksum; npm báo 0 vulnerability, Rust không có lỗi advisory/license/source, chỉ cảnh báo ISC allowance không dùng.
+- [x] Nhánh kiểm thử `codex/m1-ci-negative-proof` tạo ba lỗi chủ đích để chứng minh CI từ chối. Đây là acceptance proof, không tính vào năm vòng regression thật.
+- [ ] PR chưa merge; website và companion production chưa được triển khai từ M1.

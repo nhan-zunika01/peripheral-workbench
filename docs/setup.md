@@ -33,7 +33,9 @@ The Windows workflow in `.github/workflows/ci.yml` separates core, browser and o
 
 Each run needs a new output directory; use `-Output` when repeating a suite. Receipts include source hashes and command exit codes, and failed runs retain their logs. The browser suite includes two-tab macro storage and the large backup picker checks. Hardware tests use synthetic data and local HTTP fixtures.
 
-The workflow provisions tools before blocking outbound traffic for the project gates. Advisory and dependency-license reports run separately with network access. Those reports do not settle application ownership or select its license. GitHub execution and required branch checks need separate hosting verification; adding the workflow does not enable branch protection.
+The workflow provisions tools, then uses `scripts/ci-network.ps1` only on GitHub-hosted Windows runners. It verifies direct TCP access before the policy, denies it during the project gates while keeping loopback available, then restores the original firewall policy and verifies access again. DNS and runner control traffic remain allowed; this is not a fully disconnected VM. Local commands above use `ci.ps1` without changing the host firewall. Advisory and dependency-license reports run separately with network access using checksum-pinned cargo-deny 0.20.2. Those reports do not settle application ownership or select its license.
+
+Hosted acceptance and three expected-failure refusal cases are recorded in [the M1 manifest](quality/m1-validation.json). The `main` branch requires Windows core, browser, hardware and dependency checks, strict and including administrators. The candidate is [PR #1](https://github.com/nhan-zunika01/peripheral-workbench/pull/1); the refusal cases live on a separate test branch and cannot satisfy those positive checks.
 
 ## Discovery and selection
 
@@ -60,6 +62,8 @@ Successful operations are not replayed when another operation fails. A timeout r
 **Macros** edits data-only browser drafts: create, rename, delete, and edit ordered keyboard, mouse and standalone delay events. Import/export uses the app's version-1 JSON format, not Synapse's native macro format. Limits are 100 macros, 500 events per macro, 60,000 ms per delay and a 32,000,000-byte import. The file picker and parser use the same byte limit. A backup can include the full library, including escaped Unicode. Launch, shell commands and unsupported event shapes are rejected. Import never executes events.
 
 Use the library search to choose a macro, then select an event in the center sequence and edit its fields in Event details. Insert adds an event; Move up/down changes order without changing values. Arrow Up/Down selects an event and Alt+Arrow Up/Down moves it. Duplicate creates an independent macro with a new identity. The phone library picker can be opened or closed with its summary, and background device reads do not close menus or replace the local editor.
+
+After upgrading, reload all tabs at the same origin before editing; older loaded pages do not participate in the new Web Lock.
 
 One tab holds permission to autosave drafts to localStorage for the current browser and origin, using an exclusive Web Lock. Other tabs show a read-only library and receive saved updates. Close the editing tab, then use the permission retry control in another tab; it reloads the saved library before editing. Export JSON to keep a backup or move drafts to another browser/origin.
 
