@@ -1,0 +1,15 @@
+[graph]
+targets = ["x86_64-pc-windows-msvc"]
+
+[advisories]
+db-path = "advisory-db-cache"
+git-fetch-with-cli = true
+
+[licenses]
+allow = ["MIT", "Apache-2.0", "Unicode-3.0", "BSD-3-Clause", "ISC"]
+# Dependency policy only; the unpublished application remains subject to T01.
+private = { ignore = true }
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

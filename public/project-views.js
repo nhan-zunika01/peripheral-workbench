@@ -21,7 +21,7 @@ export function profilesPage(store, library, actions) {
   onboard.append(el('p', 'muted', onboardEntries.length ? t('onboardSchema') : t('onboardUnverified')));
   onboardEntries.forEach(entry => onboard.append(settingForm(entry, store, actions)));
   const macroStorage = panel(t('macroStorage'), 'profile-card');
-  macroStorage.append(el('p', 'muted', t(library.persistent ? 'macroBrowserSaved' : 'macroMemoryOnly')), el('p', 'muted', t('macroNoExecution')));
+  macroStorage.append(el('p', 'muted', t(library.status), { id: 'profile-macro-status' }), el('p', 'muted', t('macroNoExecution')));
   view.append(host, onboard, macroStorage); return view;
 }
 

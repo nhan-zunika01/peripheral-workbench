@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createMacroLibrary, parseMacroImport } from '../public/macros.js';
+import { createMacroLibrary, parseMacroImport, macroLimits } from '../public/macros.js';
 import { createReviewLedger } from '../public/review.js';
 import { createStore } from '../public/state.js';
 
@@ -20,7 +20,7 @@ test('macro import rejects executable or malformed events before changing the li
   assert.throws(() => parseMacroImport('{"version":1,"macros":[],"__proto__":{"polluted":true}}'));
   assert.equal({}.polluted, undefined);
   assert.throws(() => parseMacroImport(JSON.stringify({ version: 2, macros: [] })));
-  assert.throws(() => parseMacroImport('x'.repeat(1_000_001)));
+  assert.throws(() => parseMacroImport('x'.repeat(macroLimits.importBytes + 1)), /importSize/);
 });
 
 test('macro round-trip regenerates identity and keeps event values inert', () => {
@@ -47,12 +47,39 @@ test('blocked localStorage access preserves an available in-memory macro library
 });
 
 test('storage quota failure retains drafts and surfaces a storage error', () => {
-  const library = createMacroLibrary({ getItem: () => null, setItem: () => { throw new DOMException('Full', 'QuotaExceededError'); } });
+  const library = createMacroLibrary({ getItem: () => null, setItem: () => { throw new DOMException('Full', 'QuotaExceededError'); } }, { access: 'writer' });
   const macro = library.create();
   assert.equal(library.macros.length, 1); assert.equal(library.macros[0].id, macro.id);
   assert.equal(library.persistent, false); assert.ok(library.error);
   assert.equal(library.update(macro.id, { name: 'Still editable' }), true);
   assert.equal(library.macros[0].name, 'Still editable');
+});
+
+test('the largest v1 Unicode backup round-trips below the shared finite import cap', () => {
+  // Lone surrogates need six JSON bytes per UTF-16 unit, more than any other allowed character.
+  const document = { version: 1, macros: Array.from({ length: 100 }, () => ({
+    name: '\ud800'.repeat(64), events: Array.from({ length: 500 }, () => ({ kind: 'key', input: '\ud800'.repeat(32), action: 'down', delayMs: 60000 }))
+  })) };
+  const source = JSON.stringify(document, null, 2);
+  assert.equal(new TextEncoder().encode(source).length, 15_844_036);
+  assert.equal(macroLimits.importBytes, 32_000_000);
+  const library = createMacroLibrary(null), incoming = library.import(source);
+  assert.equal(incoming.length, 100);
+  assert.deepEqual(JSON.parse(library.export()), document);
+  const other = createMacroLibrary(null), copied = other.import(library.export());
+  assert.notEqual(copied[0].id, incoming[0].id);
+  assert.deepEqual(copied[99].events, incoming[99].events);
+});
+
+test('parser accepts the exact UTF-8 byte cap and rejects the next byte before parsing', () => {
+  const source = '{"version":1,"macros":[]}';
+  assert.deepEqual(parseMacroImport(source.padEnd(32_000_000)), []);
+  assert.throws(() => parseMacroImport(source.padEnd(32_000_001)), /importSize/);
+  const unicode = '{"version":1,"macros":[{"name":"界","events":[]}]}';
+  const bytes = new TextEncoder().encode(unicode).length;
+  assert.equal(parseMacroImport(unicode.padEnd(unicode.length + 32_000_000 - bytes)).length, 1);
+  assert.throws(() => parseMacroImport(unicode.padEnd(unicode.length + 32_000_001 - bytes)), /importSize/);
+  assert.throws(() => parseMacroImport('['.repeat(100_000) + ']'.repeat(100_000)), /macroFormat/);
 });
 
 test('stored duplicate macro identities are rejected before destructive CRUD', () => {

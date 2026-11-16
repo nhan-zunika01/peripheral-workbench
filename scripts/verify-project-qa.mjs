@@ -40,7 +40,7 @@ const dpiAxis = (axis, delta) => {
 const dpiValue = delta => ({ x: dpiAxis('x', delta), y: dpiAxis('y', 0) });
 let snapshot = initialSnapshot, failSetting = '', conflictSetting = '', conflictActual, currentWrites = 0, concurrentWrite = false, reads = 0;
 page.on('pageerror', error => errors.push(error.stack || error.message));
-await context.route('http://qa.local/**', async route => {
+await context.route('http://localhost/**', async route => {
   const pathname = new URL(route.request().url()).pathname;
   const file = pathname === '/transport.js' ? servedTransportPath : resolve(source, 'public', `.${pathname === '/' ? '/index.html' : pathname}`);
   const mime = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.webp': 'image/webp' }[extname(file)] || 'application/octet-stream';
@@ -49,7 +49,7 @@ await context.route('http://qa.local/**', async route => {
 });
 await context.route('http://127.0.0.1:17321/**', async route => {
   const request = route.request(), url = new URL(request.url());
-  const headers = { 'access-control-allow-origin': 'http://qa.local', 'access-control-allow-headers': 'authorization,content-type', 'access-control-allow-methods': 'GET,POST,OPTIONS', 'access-control-allow-private-network': 'true' };
+  const headers = { 'access-control-allow-origin': 'http://localhost', 'access-control-allow-headers': 'authorization,content-type', 'access-control-allow-methods': 'GET,POST,OPTIONS', 'access-control-allow-private-network': 'true' };
   if (request.method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
   if (url.pathname === '/api/pair') return route.fulfill({ json: { token: 'a'.repeat(64) }, headers });
   if (url.pathname === '/api/state') { reads++; return route.fulfill({ json: structuredClone(snapshot), headers }); }
@@ -91,7 +91,7 @@ const go = async hash => {
 const language = async locale => { await go('#settings'); await page.locator('#language-select').selectOption(locale); };
 const reload = async () => {
   snapshot = fixture(); failSetting = ''; conflictSetting = '';
-  await page.goto('http://qa.local/'); await page.locator('#connection-dot.online').waitFor(); await language('en');
+  await page.goto('http://localhost/'); await page.locator('#connection-dot.online').waitFor(); await language('en');
 };
 const poll = async () => {
   const response = page.waitForResponse(response => new URL(response.url()).pathname === '/api/state' && response.request().method() === 'GET');

@@ -1,6 +1,6 @@
 # Roadmap ổn định và mã nguồn mở
 
-Cập nhật ngày 13/11/2026, Asia/Saigon. Phạm vi là Peripheral Workbench trên Windows, bắt đầu với Viper V3 Pro SE `1532:00DE`/`00DF`. Căn cứ: [báo cáo rà soát](audits/2026-11-13-project-audit.md) và [kế hoạch thực hiện](superpowers/plans/2026-11-13-stability-open-source.md).
+Cập nhật ngày 16/11/2026, Asia/Saigon. Phạm vi là Peripheral Workbench trên Windows, bắt đầu với Viper V3 Pro SE `1532:00DE`/`00DF`. Căn cứ: [báo cáo rà soát](audits/2026-11-13-project-audit.md) và [kế hoạch thực hiện](superpowers/plans/2026-11-13-stability-open-source.md).
 
 Thứ tự quyết định: tránh ghi sai thiết bị và mất dữ liệu; phục hồi đúng sau lỗi; vận hành lâu dài có giới hạn tài nguyên; sau đó giảm độ trễ theo số đo. Khối lượng triển khai lớn không phải lý do bỏ một kiểm tra an toàn. Một tính năng chưa có bằng chứng giữ trạng thái experimental hoặc chỉ đọc.
 
@@ -8,10 +8,18 @@ Thứ tự quyết định: tránh ghi sai thiết bị và mất dữ liệu; p
 
 Tiến độ M0 ngày 15/11/2026: đã khóa ghi ở các entrypoint production, launcher và transport của trang web. Ba vòng regression đã tái hiện lỗi rồi sửa; mỗi vòng được theo sau bởi toàn bộ suite đạt. Lượt cuối có 111 test Node, 154 test Rust và 9 test hardware offline, cùng differential, launcher và browser QA. Xem [baseline](quality/baseline.md) và [manifest kiểm chứng M0](quality/m0-validation.json). T01 đã có [danh mục quyền ban đầu](legal/status.md), chưa chọn license. Clone mới từ GitHub đã chạy lại đủ suite trên cùng máy. T00 còn thiếu VM sạch và môi trường cách ly, nên M0 chưa được nghiệm thu hoàn toàn. Các cổng L/C/H/R vẫn chưa đạt; chưa mở ghi phần cứng.
 
-| Cổng | Bằng chứng bắt buộc | Trạng thái ngày rà soát |
+Việc M0 còn mở:
+
+- T00 đã có runner Windows 2025 mới, provision theo lockfile và toolchain công khai, với log/hash nguồn. Còn thiếu môi trường Windows ngắt mạng hoàn toàn: policy CI đã chứng minh chặn TCP trực tiếp của project, nhưng vẫn cho DNS và kênh điều khiển runner hoạt động.
+- T01 mới mở danh mục quyền. Quyền phân phối và license chính cần chủ thể có quyền quyết định; phần hoàn tất thuộc M2, cổng L vẫn mở.
+- Kết nối GitHub với Cloudflare Workers Builds chưa được kiểm chứng. Lượt M0 đã gặp lỗi quyền OAuth/API và chưa xác minh được dashboard; M1 chưa xử lý phần triển khai này. Deploy thủ công trước đó không chứng minh đã có tự động triển khai.
+
+Tiến độ M1 ngày 16/11/2026: mã và kiểm thử ở [PR #1](https://github.com/nhan-zunika01/peripheral-workbench/pull/1). CI hosted đã đạt đủ core, browser, hardware offline và báo cáo dependency; cả 168 hash nguồn trong từng suite khớp Git tree. Ba ca chủ đích fixture sai, thiếu test binary và thiếu browser đều bị từ chối ở đúng gate. `main` yêu cầu đủ bốn checks, strict và áp dụng cả admin. Macro dùng một writer qua Web Locks, giữ draft chưa lưu trong RAM và round-trip đủ 100 × 500 event Unicode qua trần 32.000.000 byte. Xem [checklist](superpowers/plans/2026-11-16-m1-checklist.md) và [bằng chứng M1](quality/m1-validation.json). Policy hosted chặn TCP trực tiếp, giữ loopback, DNS và runner control; chưa chứng minh cách ly mạng hoàn toàn của T00. PR chưa merge, chưa triển khai M1.
+
+| Cổng | Bằng chứng bắt buộc | Trạng thái hiện tại |
 | --- | --- | --- |
 | L: mã có giấy phép rõ | Quyền sở hữu, license chính, phạm vi từng thành phần, notices, kiểm gói phân phối | Chưa đạt |
-| C: build/kiểm thử tái lập | Fresh clone; Node/Rust/browser/differential/offline hardware checks có log gắn source hash | Chưa xác minh trong phiên này; chưa có CI trong repo |
+| C: build/kiểm thử tái lập | Fresh clone; Node/Rust/browser/differential/offline hardware checks có log gắn source hash | Hosted CI, artifact/source hash và required checks đã kiểm; còn thiếu cách ly Windows hoàn toàn của T00 |
 | S: đọc ổn định | Quá tải hữu hạn, lỗi dữ liệu macro được sửa, crash/reconnect/suspend được kiểm, soak đạt | Chưa đạt |
 | H: ghi được xác minh | Ma trận model/firmware/setting, baseline, write/readback/restore và side effects; ACK ghi đúng giới hạn | Chưa đạt |
 | R: bản phát hành ổn định | L+C+S, H cho mọi setter được bật, benchmark và rollback được review, gói đúng binary | Chưa đạt |

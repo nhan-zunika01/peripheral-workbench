@@ -1,5 +1,6 @@
 import { el, button } from './dom.js';
 import { t } from './i18n.js';
+import { macroLimits } from './macros.js';
 
 const select = (label, options, value, id) => {
   const control = el('select', '', null, { id, 'aria-label': label });
@@ -12,6 +13,14 @@ const eventValue = event => event.kind === 'key' ? event.input || t('eventInput'
 const eventDelay = event => event.kind === 'delay' ? '' : `${event.delayMs} ms ${t('delayBeforeShort')}`;
 let libraryOpen, libraryMode;
 
+export function macroStatusText(library, message = '') {
+  const notice = message || (!library.valid ? 'macroInvalid' : '');
+  const keys = [notice, notice === 'macroInvalid' && library.status === 'macroSaved' ? '' : library.status];
+  if (library.access === 'memory') keys.push('macroLockUnavailable');
+  if (library.access === 'readonly') keys.push('macroReadOnly');
+  return [...new Set(keys.filter(Boolean))].map(key => t(key)).join(' ');
+}
+
 export function macrosPage(library, selectedId, selectedIndex, search, actions) {
   const view = el('div', 'macros-page');
   const header = el('header', 'view-header macro-heading'), heading = el('div');
@@ -20,18 +29,21 @@ export function macrosPage(library, selectedId, selectedIndex, search, actions) 
   const importButton = button(t('importMacros'), () => picker.click()); importButton.dataset.macroAction = 'import';
   picker.addEventListener('change', async () => {
     const file = picker.files?.[0]; if (!file) return;
-    if (file.size > 1_000_000) { actions.setMacroMessage('importSize'); return; }
+    if (file.size > macroLimits.importBytes) { actions.setMacroMessage('importSize'); return; }
     try { actions.importMacros(await file.text()); picker.value = ''; }
-    catch (error) { actions.setMacroMessage(['importSize', 'jsonError', 'macroFormat', 'macroLimit'].includes(error.message) ? error.message : 'macroFormat'); }
+    catch (error) { actions.setMacroMessage(['importSize', 'jsonError', 'macroFormat', 'macroLimit', 'macroReadOnly'].includes(error.message) ? error.message : 'macroFormat'); }
   });
   const exportButton = button(t('exportMacros'), () => {
     try {
       const blob = new Blob([library.export()], { type: 'application/json' }), url = URL.createObjectURL(blob), anchor = el('a', 'sr-only', t('exportMacros'), { href: url, download: 'device-control-macros.json' });
       document.body.append(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 0); actions.setMacroMessage('macroExported');
-    } catch { actions.setMacroMessage('macroFormat'); }
+    } catch (error) { actions.setMacroMessage(error?.message === 'macroFormat' ? 'macroFormat' : 'macroExportFailed'); }
   });
   exportButton.dataset.action = 'export-macros'; exportButton.dataset.macroAction = 'export'; exportButton.disabled = !library.valid;
   const fileActions = el('div', 'actions macro-file-actions'); fileActions.append(picker, importButton, exportButton);
+  if (!library.writable && actions.canAcquireMacroWriter) {
+    const retry = button(t('macroTryWriter'), actions.acquireMacroWriter); retry.id = 'macro-try-writer'; fileActions.append(retry);
+  }
   header.append(heading, fileActions); view.append(header);
 
   const layout = el('div', 'macro-layout');
@@ -74,19 +86,27 @@ export function macrosPage(library, selectedId, selectedIndex, search, actions) 
   const details = el('section', 'panel macro-inspector', null, { 'aria-labelledby': 'macro-inspector-title' });
   sequence.append(el('h2', '', t('sequence'), { id: 'macro-sequence-title' }));
   details.append(el('h2', '', t('eventDetails'), { id: 'macro-inspector-title' }));
-  const statusKey = library.error || actions.macroMessage || (!library.valid ? 'macroInvalid' : !library.persistent ? 'macroMemoryOnly' : 'macroSaved');
-  const status = el('p', 'setting-status macro-status', t(statusKey), { id: 'macro-status', role: 'status', 'aria-live': 'polite' });
+  const status = el('p', 'setting-status macro-status', macroStatusText(library, actions.macroMessage), { id: 'macro-status', role: 'status', 'aria-live': 'polite' });
 
   if (!macro) {
     const empty = el('div', 'macro-sequence-empty'); empty.append(el('h3', '', t('createMacroTitle')), el('p', 'muted', t('macroEmpty')), el('p', 'macro-runtime-note', t('macroRuntimeUnavailable')));
     const newMacro = button(t('newMacro'), actions.createMacro, 'primary'); newMacro.id = 'macro-create-empty'; newMacro.dataset.macroAction = 'create-empty'; empty.append(newMacro);
     sequence.append(empty); details.append(el('p', 'muted', t('selectEventToEdit')), status);
-    layout.append(sequence, details); view.append(layout); return view;
+    layout.append(sequence, details); view.append(layout); return finish(view, library);
   }
 
   const summary = el('div', 'macro-sequence-head');
   const name = el('input', 'macro-name', null, { id: 'macro-name', type: 'text', maxlength: '64', 'aria-label': t('macroName'), 'aria-describedby': 'macro-status' }); name.value = macro.name;
-  name.addEventListener('change', () => actions.renameMacro(macro.id, name.value, name.id));
+  const updateName = () => {
+    const saved = actions.updateMacro(macro.id, { name: name.value }, false); name.setAttribute('aria-invalid', String(!saved)); actions.sync();
+    if (saved) {
+      const choice = document.getElementById(`macro-choice-${macro.id}`);
+      if (choice) { choice.textContent = name.value; choice.closest('.macro-choice-item').dataset.macroName = name.value.toLocaleLowerCase(); }
+      pickerSummary.textContent = name.value; filterMacros(searchInput.value);
+    }
+  };
+  name.addEventListener('input', updateName);
+  name.addEventListener('change', () => { name.value = name.value.trim(); updateName(); });
   const toolbar = el('div', 'macro-actions');
   const duplicate = button(t('duplicateMacro'), () => actions.duplicateMacro(macro.id)); duplicate.dataset.macroAction = 'duplicate';
   const remove = button(t('deleteMacro'), () => actions.deleteMacro(macro.id)); remove.dataset.macroAction = 'delete';
@@ -143,8 +163,9 @@ export function macrosPage(library, selectedId, selectedIndex, search, actions) 
         actions.editMacroEvent(macro.id, selectedIndex, { input: input.value }, input);
         const card = document.getElementById(`macro-event-${selectedIndex}`);
         if (card) {
+          const current = library.macros.find(item => item.id === macro.id)?.events[selectedIndex] || event;
           card.querySelector('.macro-event-value').textContent = input.value || t('eventInput');
-          card.setAttribute('aria-label', `${selectedIndex + 1}. ${eventName(event)}, ${input.value || t('eventInput')}, ${eventDelay(event)}`);
+          card.setAttribute('aria-label', `${selectedIndex + 1}. ${eventName(current)}, ${input.value || t('eventInput')}, ${eventDelay(current)}`);
         }
       }); controls.append(field('eventInput', input));
       const action = select(t('eventAction'), [[t('keyDown'), 'down'], [t('keyUp'), 'up']], event.action, 'macro-event-action'); action.dataset.eventField = 'action'; action.addEventListener('change', () => actions.changeMacroEvent(macro.id, selectedIndex, { action: action.value }, action.id)); controls.append(field('eventAction', action));
@@ -153,12 +174,28 @@ export function macrosPage(library, selectedId, selectedIndex, search, actions) 
       const action = select(t('eventAction'), [[t('keyDown'), 'down'], [t('keyUp'), 'up']], event.action, 'macro-event-action'); action.dataset.eventField = 'action'; action.addEventListener('change', () => actions.changeMacroEvent(macro.id, selectedIndex, { action: action.value }, action.id)); controls.append(field('eventAction', action));
     }
     const delay = el('input', '', null, { id: 'macro-event-delay', type: 'number', min: '0', max: '60000', step: '1', 'aria-label': t(event.kind === 'delay' ? 'durationMs' : 'delayBefore'), 'aria-describedby': 'macro-status', 'data-event-field': 'delay' }); delay.value = event.delayMs;
-    delay.addEventListener('change', () => actions.changeMacroEvent(macro.id, selectedIndex, { delayMs: delay.value === '' ? -1 : Number(delay.value) }, delay.id)); controls.append(field(event.kind === 'delay' ? 'durationMs' : 'delayBefore', delay));
+    delay.addEventListener('input', () => {
+      const delayMs = delay.value === '' ? -1 : Number(delay.value);
+      if (!actions.editMacroEvent(macro.id, selectedIndex, { delayMs }, delay, true)) return;
+      const current = { ...event, delayMs }, card = document.getElementById(`macro-event-${selectedIndex}`);
+      if (current.kind === 'key') current.input = document.getElementById('macro-event-input').value;
+      if (card) {
+        card.querySelector(current.kind === 'delay' ? '.macro-event-value' : '.macro-event-delay').textContent = current.kind === 'delay' ? eventValue(current) : eventDelay(current);
+        card.setAttribute('aria-label', `${selectedIndex + 1}. ${eventName(current)}, ${eventValue(current)}${eventDelay(current) ? `, ${eventDelay(current)}` : ''}`);
+      }
+      sequence.querySelector('.macro-total').textContent = `${t('totalDuration')}: ${total - event.delayMs + delayMs} ms`;
+    });
+    controls.append(field(event.kind === 'delay' ? 'durationMs' : 'delayBefore', delay));
     details.append(controls);
   }
 
   const save = button(t('saveMacros'), actions.saveMacros, 'primary'); save.id = 'save-macros'; save.dataset.macroAction = 'save'; save.dataset.action = 'save-macros'; save.disabled = !library.valid || !library.writable;
-  details.append(status, save); layout.append(sequence, details); view.append(layout); return view;
+  details.append(status, save); layout.append(sequence, details); view.append(layout); return finish(view, library);
+}
+
+function finish(view, library) {
+  if (!library.editable) view.querySelectorAll('[data-macro-action]:not([data-macro-action=export]), .macro-name, [data-event-field], #macro-import').forEach(control => { control.disabled = true; });
+  return view;
 }
 
 function field(labelKey, control) {
