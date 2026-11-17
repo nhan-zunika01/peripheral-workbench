@@ -7,6 +7,7 @@ $stopImplementation = ${function:Stop-SpikeChild}
 $setImplementation = ${function:Set-SpikeAdapter}
 $sealedImplementation = ${function:Assert-SpikeSealed}
 $installImplementation = ${function:Install-SpikeTools}
+$completionImplementation = ${function:Test-SpikeRelease}
 function Assert-Throws([scriptblock]$Action, [string]$Name) {
   $failed = $false
   try { & $Action } catch { $failed = $true }
@@ -66,8 +67,91 @@ $script:inventory = @(
   [pscustomobject]@{ guid = '00000000-0000-0000-0000-000000000002'; device = 'pci2'; index = 5; admin = 'Up'; status = 'Disconnected' },
   [pscustomobject]@{ guid = '00000000-0000-0000-0000-000000000003'; device = 'pci3'; index = 6; admin = 'Down'; status = 'Disabled' }
 )
+for ($i = 0; $i -lt $script:inventory.Count; $i++) {
+  $item = $script:inventory[$i]
+  $item | Add-Member NoteProperty identityProperties @{ deviceId = "logical-device-$i"; interfaceName = "interface-$i"; netLuid = "100$i"; interfaceIndex = $item.index; interfaceAdminStatus = $(if ($item.admin -eq 'Up') { 1 } else { 2 }); hidden = ($i -eq 2); virtual = ($i -ne 0); hardware = ($i -eq 0) }
+  $item | Add-Member NoteProperty bindings @()
+}
 $manifest = @{ schema = 1; seconds = 15; adapters = $script:inventory; scriptHash = ('a' * 64); mainPid = 100 }
 Assert-SpikeManifest $manifest
+$logicalManifest = $manifest | ConvertTo-Json -Depth 8 | ConvertFrom-Json -AsHashtable
+$logicalManifest.adapters[1].device = $null; $logicalManifest.adapters[2].device = $null
+Assert-SpikeManifest $logicalManifest
+foreach ($logicalFailure in @('physical','ambiguous','unknown-hardware','whitespace','empty-pnp','device-id','interface-name','luid-zero','luid-overflow','luid-fraction','guid','index','index-inconsistent','admin-inconsistent','duplicate-guid','duplicate-device','duplicate-interface','duplicate-luid')) {
+  $invalidLogical = $logicalManifest | ConvertTo-Json -Depth 8 | ConvertFrom-Json -AsHashtable
+  $target = $invalidLogical.adapters[1]; $properties = $target.identityProperties
+  switch ($logicalFailure) {
+    'physical' { $properties.hardware = $true }
+    'ambiguous' { $properties.virtual = 'true' }
+    'unknown-hardware' { $properties.hardware = $null }
+    'whitespace' { $target.device = ' ' }
+    'empty-pnp' { $target.device = '' }
+    'device-id' { $properties.deviceId = $null }
+    'interface-name' { $properties.interfaceName = ' ' }
+    'luid-zero' { $properties.netLuid = '0' }
+    'luid-overflow' { $properties.netLuid = '18446744073709551616' }
+    'luid-fraction' { $properties.netLuid = '1.5' }
+    'guid' { $target.guid = '' }
+    'index' { $target.index = 0 }
+    'index-inconsistent' { $properties.interfaceIndex = 99 }
+    'admin-inconsistent' { $properties.interfaceAdminStatus = 2 }
+    'duplicate-guid' { $target.guid = $invalidLogical.adapters[0].guid }
+    'duplicate-device' { $properties.deviceId = $invalidLogical.adapters[0].identityProperties.deviceId }
+    'duplicate-interface' { $properties.interfaceName = $invalidLogical.adapters[0].identityProperties.interfaceName }
+    'duplicate-luid' { $properties.netLuid = $invalidLogical.adapters[0].identityProperties.netLuid }
+  }
+  Assert-Throws { Assert-SpikeManifest $invalidLogical } "logical identity: $logicalFailure"
+}
+$disabledSnapshot = $logicalManifest | ConvertTo-Json -Depth 8 | ConvertFrom-Json -AsHashtable
+foreach ($adapter in $disabledSnapshot.adapters) { $adapter.admin = 'Down'; $adapter.identityProperties.interfaceAdminStatus = 2 }
+Assert-SpikeSnapshot $logicalManifest $disabledSnapshot $true
+$disabledSnapshot.adapters[2].admin = 'Up'
+Assert-Throws { Assert-SpikeSnapshot $logicalManifest $disabledSnapshot $true } 'initially disabled adapter became enabled during isolation'
+$manifest = $logicalManifest
+$receiptArm = @{ tick = 100; deadline = 100 + 15 * [Diagnostics.Stopwatch]::Frequency; supervisor = @{ id = 41; start = 122 } }
+$receiptInventory = $manifest | ConvertTo-Json -Depth 8 | ConvertFrom-Json -AsHashtable
+foreach ($adapter in $receiptInventory.adapters) { $adapter.admin = 'Down'; $adapter.identityProperties.interfaceAdminStatus = 2 }
+$receiptInventory.tick = 150; $receiptInventory.interfaces = @(@{ InterfaceIndex = 44 },@{ InterfaceIndex = 5 },@{ InterfaceIndex = 6 }); $receiptInventory.routes = @(@{ InterfaceIndex = 44 })
+$receiptInventory.adapters[0].index = 44; $receiptInventory.adapters[0].identityProperties.interfaceIndex = 44
+$validCompletion = @{ armTick = 100; deadline = $receiptArm.deadline; supervisor = $receiptArm.supervisor; scriptHash = $manifest.scriptHash; completedTick = 200; inventory = $receiptInventory }
+$script:completionReceipt = $validCompletion; $script:testFence = $false; $script:testRelease = $true
+function Test-Path { param($LiteralPath) if ($LiteralPath -like '*recovery-fence.json') { return $script:testFence }; if ($LiteralPath -like '*release.json') { if ($script:fenceOnRelease) { $script:testFence = $true }; return $script:testRelease }; $true }
+function Read-SpikeJson { param($Path) $script:completionReceipt }
+if (!(& $completionImplementation $manifest $receiptArm)) { throw 'Coherent index drift blocked an otherwise complete recovery fence' }
+Assert-Throws { Assert-SpikeSnapshot $manifest $receiptInventory $true } 'coherent index drift cannot pass strict disconnected proof'
+foreach ($receiptFailure in @('arm','deadline','supervisor','script','late','index','duplicate-index','missing-index','admin','logical','route','bindings')) {
+  $script:completionReceipt = $validCompletion | ConvertTo-Json -Depth 12 | ConvertFrom-Json -AsHashtable
+  switch ($receiptFailure) {
+    'arm' { $script:completionReceipt.armTick++ }
+    'deadline' { $script:completionReceipt.deadline++ }
+    'supervisor' { $script:completionReceipt.supervisor.start++ }
+    'script' { $script:completionReceipt.scriptHash = 'changed' }
+    'late' { $script:completionReceipt.completedTick = $receiptArm.deadline }
+    'index' { $script:completionReceipt.inventory.adapters[0].identityProperties.interfaceIndex = 45 }
+    'duplicate-index' { $script:completionReceipt.inventory.adapters[0].index = 5; $script:completionReceipt.inventory.adapters[0].identityProperties.interfaceIndex = 5 }
+    'missing-index' { $script:completionReceipt.inventory.adapters[0].identityProperties.Remove('interfaceIndex') | Out-Null }
+    'admin' { $script:completionReceipt.inventory.adapters[0].identityProperties.interfaceAdminStatus = 1 }
+    'logical' { $script:completionReceipt.inventory.adapters[0].identityProperties.deviceId = 'changed' }
+    'route' { $script:completionReceipt.inventory.routes[0].InterfaceIndex = 999 }
+    'bindings' { $script:completionReceipt.inventory.adapters[0].Remove('bindings') | Out-Null }
+  }
+  if (& $completionImplementation $manifest $receiptArm) { throw "Malformed completion receipt allowed recovery: $receiptFailure" }
+}
+function Get-SpikeTick { $script:tick }
+$script:tick = 100
+if (!(Wait-SpikeProbeRelease $manifest $receiptArm)) { throw 'Valid probe release was rejected' }
+$script:fenceOnRelease = $true
+if (Wait-SpikeProbeRelease $manifest $receiptArm) { throw 'Fence appearing during release observation allowed a probe' }
+$script:fenceOnRelease = $false; $script:testFence = $false; $script:tick = $receiptArm.deadline
+if (Wait-SpikeProbeRelease $manifest $receiptArm) { throw 'Deadline allowed a late probe release' }
+$script:tick = 100; $script:testFence = $true; $script:testRelease = $false
+if (Wait-SpikeProbeRelease $manifest $receiptArm) { throw 'Never-released child ignored the recovery fence' }
+Remove-Item Function:\Test-Path,Function:\Read-SpikeJson
+$unexpectedInventory = $receiptInventory | ConvertTo-Json -Depth 10 | ConvertFrom-Json -AsHashtable
+$extra = $unexpectedInventory.adapters[0] | ConvertTo-Json -Depth 6 | ConvertFrom-Json -AsHashtable
+$extra.guid = '00000000-0000-0000-0000-000000000009'; $extra.index = 99; $extra.identityProperties.interfaceIndex = 99; $extra.identityProperties.deviceId = 'new-device'; $extra.identityProperties.interfaceName = 'new-interface'; $extra.identityProperties.netLuid = '9999'
+$unexpectedInventory.adapters += $extra
+Assert-Throws { Assert-SpikeSnapshot $manifest $unexpectedInventory $true $false } 'new interface cannot satisfy the completion fence'
 foreach ($invalidField in @('guid','device','index','admin','duplicate')) {
   $invalidManifest = $manifest | ConvertTo-Json -Depth 8 | ConvertFrom-Json -AsHashtable
   switch ($invalidField) {
@@ -109,7 +193,8 @@ function Get-SpikeInventory {
 }
 function Set-SpikeAdapter($Adapter, [bool]$Enable) {
   $script:events.Add("$($Adapter.guid):$Enable")
-  ($script:inventory | Where-Object guid -eq $Adapter.guid).admin = if ($Enable) { 'Up' } else { 'Down' }
+  $row = $script:inventory | Where-Object guid -eq $Adapter.guid
+  $row.admin = if ($Enable) { 'Up' } else { 'Down' }; $row.identityProperties.interfaceAdminStatus = if ($Enable) { 1 } else { 2 }
 }
 function Stop-SpikeChild($Child, [bool]$RequireCleanExit = $false) { $script:events.Add('child-stop'); if ($script:stopFails -or ($script:failure -eq 'supervisor-kill-fails' -and $Child.id -eq 41)) { throw 'termination failed' }; $true }
 function Test-SpikeProcess($Identity) { $Identity.id -eq 41 -and $script:failure -in @('supervisor-hung','supervisor-kill-fails','late-disable') }
@@ -120,7 +205,7 @@ function Save-SpikeJson($Value, [string]$Path) { $script:saved[$Path] = $Value }
 foreach ($failure in @('supervisor-died-mid-disable','', 'child', 'mismatch', 'restore-mismatch', 'late', 'supervisor-hung','supervisor-kill-fails','late-disable','delayed-monitor')) {
   $script:failure = $failure
   $script:inventory = $manifest.adapters | ConvertTo-Json | ConvertFrom-Json
-  $script:inventory | Where-Object admin -eq 'Up' | ForEach-Object { $_.admin = 'Down' }
+  $script:inventory | Where-Object admin -eq 'Up' | ForEach-Object { $_.admin = 'Down'; $_.identityProperties.interfaceAdminStatus = 2 }
   $script:events = [Collections.Generic.List[string]]::new(); $script:saved = @{}
   $script:stopFails = $failure -eq 'child'; $script:tick = 100
   $arm = @{ tick = 100; deadline = 100 + 15 * [Diagnostics.Stopwatch]::Frequency; child = @{ id = 42; start = 123 }; supervisor = @{ id = 41; start = 122 } }
@@ -151,26 +236,59 @@ Assert-Throws { Invoke-SpikeWatchdog $manifest } 'recovery from non-SYSTEM ident
 if ($script:events.Count -or $script:saved.Count) { throw 'Non-SYSTEM recovery mutated state' }
 $fakeProcess = [pscustomobject]@{ HasExited = $true; ExitCode = 0; StartTime = [DateTime]::new(123, [DateTimeKind]::Utc) }
 $fakeProcess | Add-Member ScriptMethod Kill { if ($script:killFails) { throw 'Kill denied' }; $this.HasExited = $true }
-$fakeProcess | Add-Member ScriptMethod WaitForExit { param($Milliseconds) if ($Milliseconds -gt 500) { throw 'Unbounded termination wait' }; !$script:waitFails }
+$fakeProcess | Add-Member ScriptMethod WaitForExit { param($Milliseconds) if ($Milliseconds -gt 500) { throw 'Unbounded termination wait' }; if ($script:cooperativeExit) { $this.HasExited = $true }; $this.HasExited -and !$script:waitFails }
 $script:spikeHandles['42'] = $fakeProcess
 if (!(& $stopImplementation @{ id = 42; start = 123 } $true)) { throw 'Clean recorded child exit was rejected' }
 $fakeProcess.ExitCode = 1
 if (& $stopImplementation @{ id = 42; start = 123 } $true) { throw 'Abnormal child exit was accepted as clean' }
 $fakeProcess.HasExited = $false; $fakeProcess.ExitCode = 0
 if (& $stopImplementation @{ id = 42; start = 123 } $true) { throw 'Forced probe termination was treated as proof of descendant cleanup' }
+$fakeProcess.HasExited = $false; $script:cooperativeExit = $true
+if (!(& $stopImplementation @{ id = 42; start = 123 } $true)) { throw 'Cooperative clean child cancellation was rejected' }
+$script:cooperativeExit = $false
 $fakeProcess.HasExited = $false; $script:killFails = $true
 Assert-Throws { & $stopImplementation @{ id = 42; start = 123 } $true } 'failed native termination'
 $script:killFails = $false; $script:waitFails = $true
 Assert-Throws { & $stopImplementation @{ id = 42; start = 123 } $true } 'termination confirmation timeout'
 $script:waitFails = $false; $script:spikeHandles.Clear()
-$script:spikeAdapterHandles[$manifest.adapters[0].guid] = [pscustomobject]@{ cached = $true }
-$script:enableCount = 0
-function Get-NetAdapter { param([switch]$IncludeHidden) throw 'Inventory query entered the restoration path' }
-function Enable-NetAdapter { param([Parameter(ValueFromPipeline)]$InputObject,[switch]$Confirm) process { $script:enableCount++ } }
+function New-CimFixture($Record, [int]$Index = 0) {
+  $p = $Record.identityProperties; if (!$Index) { $Index = $Record.index }
+  [pscustomobject]@{ InterfaceGuid = [guid]$Record.guid; PnPDeviceID = $Record.device; DeviceID = $p.deviceId; InterfaceName = $p.interfaceName; NetLuid = [uint64]$p.netLuid; Virtual = $p.virtual; HardwareInterface = $p.hardware; Hidden = $p.hidden; ifIndex = $Index; InterfaceIndex = $Index; AdminStatus = 'Down'; InterfaceAdminStatus = 2 }
+}
+$cachedAdapter = New-CimFixture $manifest.adapters[0] 44
+$script:spikeAdapterHandles[$manifest.adapters[0].guid] = $cachedAdapter
+$script:enableCount = 0; $script:queryForbidden = $true; $script:enabledObjects = [Collections.Generic.List[object]]::new()
+function Get-NetAdapter { param([switch]$IncludeHidden) if ($script:queryForbidden) { throw 'Inventory query entered the restoration path' }; $script:adapterCandidates }
+function Enable-NetAdapter { param([Parameter(ValueFromPipeline)]$InputObject,[switch]$Confirm) process { $script:enableCount++; $script:enabledObjects.Add($InputObject) } }
 & $setImplementation $manifest.adapters[0] $true
-if ($script:enableCount -ne 1) { throw 'Cached exact adapter was not used for restoration' }
+if ($script:enableCount -ne 1 -or ![object]::ReferenceEquals($cachedAdapter, $script:enabledObjects[0])) { throw 'Changed index prevented restoration of the exact cached logical adapter' }
+foreach ($mismatch in @('InterfaceGuid','PnPDeviceID','DeviceID','InterfaceName','NetLuid','Virtual','HardwareInterface','Hidden')) {
+  $badCache = $cachedAdapter.PSObject.Copy()
+  $badCache.$mismatch = switch ($mismatch) { 'InterfaceGuid' { [guid]'00000000-0000-0000-0000-000000000009' } 'Virtual' { $true } 'HardwareInterface' { $false } 'Hidden' { $true } default { 'changed' } }
+  $script:spikeAdapterHandles[$manifest.adapters[0].guid] = $badCache
+  Assert-Throws { & $setImplementation $manifest.adapters[0] $true } "cached identity mismatch: $mismatch"
+}
+$script:spikeAdapterHandles[$manifest.adapters[2].guid] = New-CimFixture $manifest.adapters[2]
+Assert-Throws { & $setImplementation $manifest.adapters[2] $true } 'initially Down adapter mutation'
+if ($script:enableCount -ne 1) { throw 'Invalid or initially Down cached adapter was enabled' }
 $script:spikeAdapterHandles.Clear()
-Remove-Item Function:\Get-NetAdapter,Function:\Enable-NetAdapter
+$script:enabledObjects.Clear(); $script:enableCount = 0; $script:failure = 'index-change'; $script:stopFails = $false; $script:tick = 100; $script:saved = @{}
+$script:inventory = $manifest.adapters | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+foreach ($row in $script:inventory) { $row.admin = 'Down'; $row.identityProperties.interfaceAdminStatus = 2 }
+$script:inventory[0].index = 44; $script:inventory[0].identityProperties.interfaceIndex = 44
+foreach ($row in $manifest.adapters | Where-Object admin -eq 'Up') { $script:spikeAdapterHandles[$row.guid] = New-CimFixture $row $(if ($row.index -eq 4) { 44 } else { $row.index }) }
+function Set-SpikeAdapter($Adapter, [bool]$Enable) { & $setImplementation $Adapter $Enable; $row = $script:inventory | Where-Object guid -eq $Adapter.guid; $row.admin = 'Up'; $row.identityProperties.interfaceAdminStatus = 1 }
+$indexRecovery = Invoke-SpikeRecovery $manifest $arm 'index-recovery'
+if ($indexRecovery.pass -or $indexRecovery.networkHeld -or $script:enableCount -ne 2 -or $indexRecovery.after.adapters[0].admin -ne 'Up') { throw 'Coherent changed-index recovery did not restore exact adapters and then fail strict proof' }
+foreach ($row in $manifest.adapters | Where-Object admin -eq 'Up') { if (@($script:enabledObjects | Where-Object { [object]::ReferenceEquals($_, $script:spikeAdapterHandles[$row.guid]) }).Count -ne 1) { throw 'Recovery did not pass the exact cached CIM object to Enable-NetAdapter' } }
+$script:spikeAdapterHandles.Clear(); $script:queryForbidden = $false; $script:adapterCandidates = @($cachedAdapter,$cachedAdapter.PSObject.Copy()); $script:disableCount = 0
+function Disable-NetAdapter { param([Parameter(ValueFromPipeline)]$InputObject,[switch]$Confirm) process { $script:disableCount++; $script:disabledObject = $InputObject } }
+Assert-Throws { & $setImplementation $manifest.adapters[0] $false } 'duplicate live logical identity'
+if ($script:disableCount) { throw 'Ambiguous logical match reached adapter mutation' }
+$script:adapterCandidates = @($cachedAdapter)
+& $setImplementation $manifest.adapters[0] $false
+if ($script:disableCount -ne 1 -or ![object]::ReferenceEquals($script:disabledObject, $cachedAdapter)) { throw 'Disable did not receive the exact unique logical CIM match' }
+Remove-Item Function:\Get-NetAdapter,Function:\Enable-NetAdapter,Function:\Disable-NetAdapter
 function Test-Path { param([string]$Path) $script:fence }
 function Get-Process { param($Id,$ErrorAction) $fakeProcess }
 function Read-SpikeJson([string]$Path) { if ($Path -like '*child.json') { @{ id = 42; start = 123 } } else { @{ id = 41; start = 122 } } }

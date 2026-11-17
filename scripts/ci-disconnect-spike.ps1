@@ -32,22 +32,47 @@ function Assert-SpikeHost($Context) {
     $Context.workflow -cne 'T00 disconnect feasibility' -or $Context.job -cne 'spike' -or
     $Context.branch -cne 'refs/heads/codex/t00-offline-spike' -or $Context.temp -notmatch '^[A-Za-z]:\\[^\r\n]+$') { throw 'Restricted to the reviewed experimental GitHub-hosted Windows job' }
 }
-function Get-SpikeAdapterKey($Adapters) { (@($Adapters | Sort-Object guid | ForEach-Object { "$($_.guid)|$($_.device)|$($_.index)|$($_.admin)" }) -join ';') }
+function ConvertTo-SpikeAdapter($Adapter) {
+  @{ guid = [string]$Adapter.InterfaceGuid; device = $Adapter.PnPDeviceID; index = $Adapter.ifIndex; admin = [string]$Adapter.AdminStatus; status = [string]$Adapter.Status
+    identityProperties = @{ deviceId = $Adapter.DeviceID; interfaceName = $Adapter.InterfaceName; netLuid = [string]$Adapter.NetLuid; interfaceIndex = $Adapter.InterfaceIndex; interfaceAdminStatus = $Adapter.InterfaceAdminStatus; hidden = $Adapter.Hidden; virtual = $Adapter.Virtual; hardware = $Adapter.HardwareInterface; state = $Adapter.State; availability = $Adapter.Availability; configManagerErrorCode = $Adapter.ConfigManagerErrorCode } }
+}
+function Get-SpikeAdapterIdentity($Adapter) {
+  $p = $Adapter.identityProperties
+  $identity = [ordered]@{ guid = ([guid]$Adapter.guid).ToString(); device = $Adapter.device; deviceId = $p.deviceId; interfaceName = $p.interfaceName; netLuid = $p.netLuid; virtual = $p.virtual; hardware = $p.hardware; hidden = $p.hidden } | ConvertTo-Json -Compress
+  [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($identity)))
+}
+function Get-SpikeAdapterMatches($Adapter, $Objects) {
+  $identity = Get-SpikeAdapterIdentity $Adapter
+  @($Objects | Where-Object { (Get-SpikeAdapterIdentity (ConvertTo-SpikeAdapter $_)) -ceq $identity })
+}
+function Get-SpikeAdapterKey($Adapters, [bool]$IncludeIndex = $true) {
+  (@($Adapters | Sort-Object guid | ForEach-Object { $index = if ($IncludeIndex) { "$($_.index)|$($_.identityProperties.interfaceIndex)" } else { '' }; "$(Get-SpikeAdapterIdentity $_)|$($_.admin)|$($_.identityProperties.interfaceAdminStatus)|$index" }) -join ';')
+}
 function Assert-SpikeManifest($Manifest) {
   if ($Manifest.schema -ne 1 -or $Manifest.seconds -ne 15 -or !$Manifest.mainPid -or $Manifest.scriptHash -notmatch '^[a-f0-9]{64}$' -or !@($Manifest.adapters).Count) { throw 'Malformed recovery manifest' }
-  $guids = @{}; $row = 0
-  foreach ($adapter in $Manifest.adapters) {
-    $guid = [guid]::Empty; $issues = @()
+  Assert-SpikeAdapters $Manifest.adapters
+  if (!@($Manifest.adapters | Where-Object admin -eq 'Up').Count) { throw 'No enabled external adapter' }
+}
+function Assert-SpikeAdapters($Adapters) {
+  $seen = @{ guid = @{}; deviceId = @{}; interfaceName = @{}; netLuid = @{}; index = @{} }; $row = 0
+  foreach ($adapter in $Adapters) {
+    $guid = [guid]::Empty; $index = [uint32]0; $luid = [uint64]0; $issues = @(); $p = $adapter.identityProperties
     if (![guid]::TryParse($adapter.guid, [ref]$guid) -or $guid -eq [guid]::Empty) { $issues += 'guid-missing-or-invalid' }
-    if ([string]::IsNullOrWhiteSpace($adapter.device)) { $issues += 'pnp-device-missing' }
-    if ($adapter.index -le 0) { $issues += 'interface-index-invalid' }
+    $nonPnp = $null -eq $adapter.device -and $p.virtual -is [bool] -and $p.virtual -and $p.hardware -is [bool] -and !$p.hardware
+    if (!$nonPnp -and ($adapter.device -isnot [string] -or [string]::IsNullOrWhiteSpace($adapter.device))) { $issues += 'pnp-device-missing' }
+    foreach ($field in @('deviceId','interfaceName')) { if ($p.$field -isnot [string] -or [string]::IsNullOrWhiteSpace($p.$field)) { $issues += "$field-missing-or-invalid" } }
+    if (![uint64]::TryParse([string]$p.netLuid, [Globalization.NumberStyles]::None, [Globalization.CultureInfo]::InvariantCulture, [ref]$luid) -or !$luid) { $issues += 'net-luid-invalid' }
+    if (![uint32]::TryParse([string]$adapter.index, [ref]$index) -or !$index) { $issues += 'interface-index-invalid' }
+    if ([string]$p.interfaceIndex -cne [string]$index) { $issues += 'interface-index-inconsistent' }
     if ($adapter.admin -notin @('Up','Down')) { $issues += 'admin-state-unknown' }
-    if ($guids.ContainsKey($guid.ToString())) { $issues += 'duplicate-guid' }
+    $admin = if ($adapter.admin -eq 'Up') { 1 } elseif ($adapter.admin -eq 'Down') { 2 } else { 0 }
+    if ([string]$p.interfaceAdminStatus -cne [string]$admin) { $issues += 'admin-state-inconsistent' }
+    $ids = @{ guid = $guid.ToString(); deviceId = $p.deviceId; interfaceName = $p.interfaceName; netLuid = [string]$luid; index = [string]$index }
+    foreach ($field in $seen.Keys) { if ($seen[$field].ContainsKey([string]$ids[$field])) { $issues += "duplicate-$field" } }
     $category = if ($adapter.identityProperties.hidden) { 'hidden' } elseif ($adapter.identityProperties.virtual) { 'virtual' } elseif ($adapter.identityProperties.hardware) { 'hardware' } else { 'unspecified' }
     if ($issues.Count) { throw "Invalid adapter row=$row category=$category fields=$($issues -join ',') admin=$($adapter.admin)" }
-    $guids[$guid.ToString()] = $true; $row++
+    foreach ($field in $seen.Keys) { $seen[$field][[string]$ids[$field]] = $true }; $row++
   }
-  if (!@($Manifest.adapters | Where-Object admin -eq 'Up').Count) { throw 'No enabled external adapter' }
 }
 function Protect-SpikeEvidence([string]$Text, $Manifest, [string]$Root) {
   $identities = @($Manifest.adapters | ForEach-Object { $_.guid; $_.device; $_.identityProperties.deviceId; $_.identityProperties.interfaceName; $_.identityProperties.netLuid } | Where-Object { ![string]::IsNullOrWhiteSpace([string]$_) -and [string]$_ -ne '0' } | ForEach-Object { [string]$_ } | Select-Object -Unique | Sort-Object Length -Descending)
@@ -75,9 +100,9 @@ function Get-SpikeInventory {
   }
   $adapters = @($adapterObjects | ForEach-Object {
     $adapter = $_
-    @{ guid = [string]$adapter.InterfaceGuid; device = $adapter.PnPDeviceID; index = $adapter.ifIndex; admin = [string]$adapter.AdminStatus; status = [string]$adapter.Status
-      identityProperties = @{ deviceId = $adapter.DeviceID; interfaceName = $adapter.InterfaceName; netLuid = [string]$adapter.NetLuid; interfaceIndex = $adapter.InterfaceIndex; interfaceAdminStatus = $adapter.InterfaceAdminStatus; hidden = $adapter.Hidden; virtual = $adapter.Virtual; hardware = $adapter.HardwareInterface; state = $adapter.State; availability = $adapter.Availability; configManagerErrorCode = $adapter.ConfigManagerErrorCode }
-      bindings = @($bindingObjects | Where-Object { $_.Name -eq $adapter.Name -and $_.InterfaceDescription -eq $adapter.InterfaceDescription } | Select-Object ComponentID,Enabled) }
+    $record = ConvertTo-SpikeAdapter $adapter
+    $record.bindings = @($bindingObjects | Where-Object { $_.Name -eq $adapter.Name -and $_.InterfaceDescription -eq $adapter.InterfaceDescription } | Select-Object ComponentID,Enabled)
+    $record
   })
   $interfaces = @(Get-NetIPInterface | Select-Object InterfaceIndex,InterfaceAlias,AddressFamily,ConnectionState)
   $routes = @(Get-NetRoute | Select-Object InterfaceIndex,AddressFamily,DestinationPrefix,NextHop)
@@ -90,27 +115,42 @@ function Get-SpikeInventory {
   @{ tick = (Get-SpikeTick); utc = [DateTime]::UtcNow.ToString('o'); adapters = $adapters; interfaces = $interfaces; routes = $routes }
 }
 function Set-SpikeAdapter($Adapter, [bool]$Enable) {
-  $actual = if ($Enable -and $script:spikeAdapterHandles.ContainsKey($Adapter.guid)) { @($script:spikeAdapterHandles[$Adapter.guid]) } else { @(Get-NetAdapter -IncludeHidden | Where-Object { $_.InterfaceGuid.ToString() -eq $Adapter.guid -and $_.PnPDeviceID -eq $Adapter.device -and $_.ifIndex -eq $Adapter.index }) }
+  if ($Adapter.admin -cne 'Up') { throw 'Only originally Up adapters may be mutated' }
+  $objects = if ($Enable -and $script:spikeAdapterHandles.ContainsKey($Adapter.guid)) { @($script:spikeAdapterHandles[$Adapter.guid]) } else { @(Get-NetAdapter -IncludeHidden) }
+  $actual = @(Get-SpikeAdapterMatches $Adapter $objects)
   if ($actual.Count -ne 1) { throw 'Recorded adapter identity changed' }
   if ($Enable) { $actual[0] | Enable-NetAdapter -Confirm:$false } else { $actual[0] | Disable-NetAdapter -Confirm:$false }
 }
-function Assert-SpikeSnapshot($Manifest, $Inventory, [bool]$Disabled) {
+function Assert-SpikeSnapshot($Manifest, $Inventory, [bool]$Disabled, [bool]$IncludeIndex = $true) {
+  Assert-SpikeAdapters $Inventory.adapters
   $expected = $Manifest.adapters | ConvertTo-Json -Depth 8 | ConvertFrom-Json -AsHashtable
-  if ($Disabled) { foreach ($adapter in $expected) { $adapter.admin = 'Down' } }
-  if ((Get-SpikeAdapterKey $expected) -cne (Get-SpikeAdapterKey $Inventory.adapters)) { throw 'Adapter inventory or administrative state mismatch' }
+  if ($Disabled) { foreach ($adapter in $expected) { $adapter.admin = 'Down'; $adapter.identityProperties.interfaceAdminStatus = 2 } }
+  if ((Get-SpikeAdapterKey $expected $IncludeIndex) -cne (Get-SpikeAdapterKey $Inventory.adapters $IncludeIndex)) { throw 'Adapter inventory or administrative state mismatch' }
 }
 function Stop-SpikeChild($Child, [bool]$RequireCleanExit = $false) {
   $process = if ($script:spikeHandles.ContainsKey([string]$Child.id)) { $script:spikeHandles[[string]$Child.id] } else { Get-Process -Id $Child.id -ErrorAction SilentlyContinue }
   if (!$process) { return !$RequireCleanExit }
   if ($process.StartTime.ToUniversalTime().Ticks -ne $Child.start) { throw 'Child PID was reused' }
   if ($process.HasExited) { return (!$RequireCleanExit -or $process.ExitCode -eq 0) }
+  if ($RequireCleanExit -and $process.WaitForExit(500)) { return $process.ExitCode -eq 0 }
   $process.Kill()
   if (!$process.WaitForExit(500)) { throw 'Process termination was not confirmed within 500ms' }
   # shortcut: forced probe exit cannot prove descendant cleanup; keep NICs disabled until full Job Object containment exists.
   !$RequireCleanExit
 }
 function Wait-SpikeTick([long]$Deadline) { while ((Get-SpikeTick) -lt $Deadline) { Start-Sleep -Milliseconds 10 } }
-function Test-SpikeRelease($Manifest) { Test-Path -LiteralPath "$($Manifest.root)\release.json" }
+function Test-SpikeRelease($Manifest, $Arm) {
+  try {
+    if (!(Test-Path -LiteralPath "$($Manifest.root)\disabler-complete.json")) { return $false }
+    $complete = Read-SpikeJson "$($Manifest.root)\disabler-complete.json"
+    if ($complete.armTick -ne $Arm.tick -or $complete.deadline -ne $Arm.deadline -or $complete.supervisor.id -ne $Arm.supervisor.id -or $complete.supervisor.start -ne $Arm.supervisor.start -or $complete.scriptHash -cne $Manifest.scriptHash -or $complete.completedTick -lt $Arm.tick -or $complete.completedTick -ge $Arm.deadline -or $complete.inventory.tick -gt $complete.completedTick -or $complete.inventory.tick -lt $Arm.tick) { return $false }
+    Assert-SpikeSnapshot $Manifest $complete.inventory $true $false
+    if (@($complete.inventory.adapters | Where-Object { $_.bindings -isnot [Collections.IList] }).Count) { return $false }
+    if ($complete.inventory.interfaces -isnot [Collections.IList] -or $complete.inventory.routes -isnot [Collections.IList]) { return $false }
+    foreach ($interface in @($complete.inventory.interfaces) + @($complete.inventory.routes)) { if ($interface.InterfaceIndex -notin $complete.inventory.adapters.index -and $interface.InterfaceIndex -ne 1) { return $false } }
+    $true
+  } catch { $false }
+}
 function Invoke-SpikeRecovery($Manifest, $Arm, [string]$Receipt) {
   Assert-SpikeManifest $Manifest; Assert-SpikeArm $Arm $Manifest
   $result = @{ pass = $true; deadline = $Arm.deadline; childStopped = $false; supervisorStopped = $false; networkHeld = $false; errors = @(); after = $null }
@@ -123,7 +163,7 @@ function Invoke-SpikeRecovery($Manifest, $Arm, [string]$Receipt) {
   } catch { $canRestore = $false; $result.errors += $_.Exception.Message }
   try { $result.childStopped = Stop-SpikeChild $Arm.child $true } catch { $canRestore = $false; $result.errors += $_.Exception.Message }
   if ($result.childStopped -ne $true -or $result.supervisorStopped -ne $true) { $canRestore = $false }
-  if (!(Test-SpikeRelease $Manifest)) { $canRestore = $false; $result.errors += 'No completed-disconnection receipt; pending disable operations cannot be excluded' }
+  if (!(Test-SpikeRelease $Manifest $Arm)) { $canRestore = $false; $result.errors += 'No valid completed-disabler receipt; pending disable operations cannot be excluded' }
   if (!$canRestore) {
     $result.pass = $false; $result.networkHeld = $true; $result.errors += 'NICs remain disabled because safe restoration was not established; disposable VM teardown is required'
     Save-SpikeJson $result $Receipt
@@ -203,6 +243,14 @@ function Wait-SpikeFile([string]$Path, [int]$Seconds = 30) {
   while (!(Test-Path -LiteralPath $Path)) { if ((Get-SpikeTick) -gt $until) { throw "Timed out waiting for $([IO.Path]::GetFileName($Path))" }; Start-Sleep -Milliseconds 50 }
   Read-SpikeJson $Path
 }
+function Test-SpikeProbeWindow($Manifest, $Arm) { (Get-SpikeTick) -lt $Arm.deadline -and !(Test-Path -LiteralPath "$($Manifest.root)\recovery-fence.json") }
+function Wait-SpikeProbeRelease($Manifest, $Arm) {
+  while (Test-SpikeProbeWindow $Manifest $Arm) {
+    if (Test-Path -LiteralPath "$($Manifest.root)\release.json") { return (Test-SpikeProbeWindow $Manifest $Arm) }
+    Start-Sleep -Milliseconds 25
+  }
+  $false
+}
 function Start-SpikeMode($Manifest, [string]$ChildMode, [pscredential]$Credential, [string]$ChildStage = 'before') {
   $options = @{ FilePath = $Manifest.pwsh; ArgumentList = @('-NoProfile','-File',"`"$($Manifest.script)`"",'-Mode',$ChildMode,'-State',"`"$($Manifest.root)\manifest.json`"",'-Stage',$ChildStage); WorkingDirectory = $Manifest.root; WindowStyle = 'Hidden'; PassThru = $true }
   $logRoot = $Manifest.root
@@ -236,9 +284,11 @@ function Invoke-SpikeChild($Manifest, [string]$ChildStage) {
   $profileCheck = Join-Path $env:USERPROFILE 'profile-check'; 'writable' | Set-Content -LiteralPath $profileCheck
   if ($ChildStage -eq 'during') {
     Save-SpikeJson @{ sid = $identity.User.Value; pid = $PID } "$($Manifest.childRoot)\ready.json"
-    $null = Wait-SpikeFile "$($Manifest.root)\release.json"
+    $arm = Wait-SpikeFile "$($Manifest.root)\arm.json" 60
+    if (!(Wait-SpikeProbeRelease $Manifest $arm)) { return }
   }
   $start = Get-SpikeTick
+  if ($ChildStage -eq 'during' -and !(Test-SpikeProbeWindow $Manifest $arm)) { return }
   $rows = @(& $Manifest.node $Manifest.probe $Manifest.address '443')
   if ($LASTEXITCODE -ne 0 -or $rows.Count -ne 1) { throw 'Finite Node probe failed' }
   $probe = $rows[0] | ConvertFrom-Json -AsHashtable
@@ -262,7 +312,7 @@ function Invoke-SpikeWatchdog($Manifest) {
   }
   $adapterObjects = @(Get-NetAdapter -IncludeHidden)
   foreach ($adapter in $Manifest.adapters) {
-    $matches = @($adapterObjects | Where-Object { $_.InterfaceGuid.ToString() -eq $adapter.guid -and $_.PnPDeviceID -eq $adapter.device -and $_.ifIndex -eq $adapter.index })
+    $matches = @(Get-SpikeAdapterMatches $adapter $adapterObjects)
     if ($matches.Count -ne 1) { throw 'Pre-arm adapter identity mismatch' }
     $script:spikeAdapterHandles[$adapter.guid] = $matches[0]
   }
@@ -307,7 +357,9 @@ function Invoke-SpikeSupervisor($Manifest) {
   $armed = Wait-SpikeFile "$($Manifest.root)\armed.json" 5
   if ($armed.deadline -ne $arm.deadline) { throw 'Watchdog did not arm exact deadline' }
   foreach ($adapter in $Manifest.adapters | Where-Object admin -eq 'Up') { Assert-SpikeDisableWindow $Manifest $arm; Set-SpikeAdapter $adapter $false }
-  $disabled = Get-SpikeInventory; Assert-SpikeSnapshot $Manifest $disabled $true
+  $disabled = Get-SpikeInventory; Assert-SpikeSnapshot $Manifest $disabled $true $false
+  Save-SpikeJson @{ armTick = $arm.tick; deadline = $arm.deadline; supervisor = $arm.supervisor; scriptHash = $Manifest.scriptHash; completedTick = (Get-SpikeTick); inventory = $disabled } "$($Manifest.root)\disabler-complete.json"
+  Assert-SpikeSnapshot $Manifest $disabled $true
   if ((Get-SpikeTick) -ge $arm.deadline) { throw 'Isolation consumed the disconnect deadline' }
   Save-SpikeJson $disabled "$($Manifest.root)\release.json"
   if ($Manifest.scenario -eq 'supervisor-death') { Save-SpikeJson @{ pid = $PID; tick = (Get-SpikeTick); reason = 'deliberate-supervisor-death' } "$($Manifest.root)\death.json"; Stop-Process -Id $PID -Force }
@@ -408,7 +460,7 @@ function Invoke-SpikeRun {
     try {
       $publicProof = Protect-SpikeEvidence ($proof | ConvertTo-Json -Depth 16) $manifest $root
       Save-SpikeJson ($publicProof | ConvertFrom-Json -AsHashtable) (Join-Path $Output 'proof.json')
-      foreach ($name in @('ack.json','arm.json','release.json','recovery-fence.json','recovery.json','timeline.json','death.json','watchdog-error.json')) {
+      foreach ($name in @('ack.json','arm.json','release.json','disabler-complete.json','recovery-fence.json','recovery.json','timeline.json','death.json','watchdog-error.json')) {
         if (Test-Path "$root\$name") {
           $publicReceipt = Protect-SpikeEvidence (Get-Content -LiteralPath "$root\$name" -Raw) $manifest $root
           Save-SpikeJson ($publicReceipt | ConvertFrom-Json -AsHashtable) (Join-Path $Output $name)
