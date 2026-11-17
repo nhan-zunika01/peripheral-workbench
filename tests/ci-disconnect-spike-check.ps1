@@ -68,6 +68,27 @@ $script:inventory = @(
 )
 $manifest = @{ schema = 1; seconds = 15; adapters = $script:inventory; scriptHash = ('a' * 64); mainPid = 100 }
 Assert-SpikeManifest $manifest
+foreach ($invalidField in @('guid','device','index','admin','duplicate')) {
+  $invalidManifest = $manifest | ConvertTo-Json -Depth 8 | ConvertFrom-Json -AsHashtable
+  switch ($invalidField) {
+    'guid' { $invalidManifest.adapters[0].guid = $null; $expectedIssue = 'guid-missing-or-invalid' }
+    'device' { $invalidManifest.adapters[0].device = $null; $expectedIssue = 'pnp-device-missing' }
+    'index' { $invalidManifest.adapters[0].index = 0; $expectedIssue = 'interface-index-invalid' }
+    'admin' { $invalidManifest.adapters[0].admin = 'Unknown'; $expectedIssue = 'admin-state-unknown' }
+    'duplicate' { $invalidManifest.adapters[1].guid = $invalidManifest.adapters[0].guid; $expectedIssue = 'duplicate-guid' }
+  }
+  $diagnostic = ''
+  try { Assert-SpikeManifest $invalidManifest } catch { $diagnostic = $_.Exception.Message }
+  if ($diagnostic -notmatch "fields=.*$expectedIssue" -or $diagnostic -notmatch 'row=\d+ category=') { throw "Adapter failure lost its field/category: $invalidField" }
+}
+$invalidManifest.adapters[0].device = $null; $invalidManifest.adapters[1].device = ''; $invalidManifest.adapters[2].device = ' '
+$failureProof = @{ pass = $false; error = 'pnp-device-missing'; beforeInventory = @{ adapters = $invalidManifest.adapters } }
+$publicFailure = Protect-SpikeEvidence ($failureProof | ConvertTo-Json -Depth 10) $invalidManifest 'C:\controller'
+$publicFailureObject = $publicFailure | ConvertFrom-Json
+if ($publicFailureObject.error -ne 'pnp-device-missing' -or $publicFailureObject.beforeInventory.adapters.Count -ne 3 -or $publicFailure -match '00000000-0000-0000-0000-000000000001' -or $publicFailureObject.pass) { throw 'Null/empty identities masked the original failed proof or escaped redaction' }
+$opaqueManifest = @{ adapters = @(@{ guid = '00000000-0000-0000-0000-000000000004'; device = 'PCI\opaque-pnp'; identityProperties = @{ deviceId = 'opaque-device'; interfaceName = 'NDIS\opaque-interface'; netLuid = '987654321012345' } }) }
+$opaquePublic = Protect-SpikeEvidence ($opaqueManifest | ConvertTo-Json -Depth 6) $opaqueManifest 'C:\controller'
+if ($opaquePublic -match 'opaque-|987654321012345' -or ($opaquePublic | ConvertFrom-Json).adapters[0].identityProperties.netLuid -notmatch '^sha256:[a-f0-9]{64}$') { throw 'Additional adapter identifiers escaped public evidence redaction' }
 foreach ($change in @({ $bad.seconds = 0 }, { $bad.adapters = @() }, { $bad.adapters[0].guid = 'garbage' }, { $bad.adapters[0].admin = 'Unknown' })) {
   $bad = $manifest | ConvertTo-Json -Depth 8 | ConvertFrom-Json -AsHashtable
   & $change
@@ -216,6 +237,7 @@ $message = ''
 try { & $sealedImplementation $aclLeaf.FullName $controllerSid } catch { $message = $_.Exception.Message }
 if ($message -notmatch 'principal=S-1-5-32-545' -or $message -notmatch 'rights=DeleteSubdirectoriesAndFiles' -or $message -notmatch 'category=ancestor' -or $message -match 'private-profile' -or $message -notmatch '\[profile\]') { throw 'ACL failure diagnostics did not identify and redact the rejected ancestor' }
 $script:accountAttempts = 0; $script:toolChecked = $false; $script:saved = @{}
+function Save-SpikeJson($Value, [string]$Path) { if ($Path -like '*proof.json') { throw 'Simulated evidence export failure' }; $script:saved[$Path] = $Value }
 function Test-Path { param($LiteralPath,$Path) $false }
 function New-Item { param($ItemType,$Path) }
 function Set-SpikeAcl { param($Path,$Sid,$Rights) }
@@ -228,7 +250,7 @@ function Install-SpikeTools {
 }
 function New-LocalUser { param($Name,$Password,[switch]$AccountNeverExpires,[switch]$PasswordNeverExpires) $script:accountAttempts++; throw 'Account creation preceded immutable tool preparation' }
 $oldTemp = $env:RUNNER_TEMP; $env:RUNNER_TEMP = 'C:\mutable-runner-temp'
-try { Invoke-SpikeRun 1>$null } catch { $setupError = $_.Exception.Message } finally { $env:RUNNER_TEMP = $oldTemp }
+try { Invoke-SpikeRun 1>$null 3>$null } catch { $setupError = $_.Exception.Message } finally { $env:RUNNER_TEMP = $oldTemp }
 if (!$script:toolChecked -or $script:accountAttempts -ne 0 -or $setupError -notmatch 'category=ancestor') { throw 'Setup reached account creation before rejecting the replaceable bootstrap runtime' }
 Remove-Item Function:\Test-Path,Function:\New-Item,Function:\Get-ChildItem,Function:\New-LocalUser
 Remove-Item Function:\Get-Item,Function:\Get-Acl

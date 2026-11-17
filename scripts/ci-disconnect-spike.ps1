@@ -35,13 +35,28 @@ function Assert-SpikeHost($Context) {
 function Get-SpikeAdapterKey($Adapters) { (@($Adapters | Sort-Object guid | ForEach-Object { "$($_.guid)|$($_.device)|$($_.index)|$($_.admin)" }) -join ';') }
 function Assert-SpikeManifest($Manifest) {
   if ($Manifest.schema -ne 1 -or $Manifest.seconds -ne 15 -or !$Manifest.mainPid -or $Manifest.scriptHash -notmatch '^[a-f0-9]{64}$' -or !@($Manifest.adapters).Count) { throw 'Malformed recovery manifest' }
-  $guids = @{}
+  $guids = @{}; $row = 0
   foreach ($adapter in $Manifest.adapters) {
-    $guid = [guid]::Empty
-    if (![guid]::TryParse($adapter.guid, [ref]$guid) -or $guid -eq [guid]::Empty -or !$adapter.device -or $adapter.index -le 0 -or $adapter.admin -notin @('Up','Down') -or $guids.ContainsKey($adapter.guid)) { throw 'Malformed or duplicate adapter identity' }
-    $guids[$adapter.guid] = $true
+    $guid = [guid]::Empty; $issues = @()
+    if (![guid]::TryParse($adapter.guid, [ref]$guid) -or $guid -eq [guid]::Empty) { $issues += 'guid-missing-or-invalid' }
+    if ([string]::IsNullOrWhiteSpace($adapter.device)) { $issues += 'pnp-device-missing' }
+    if ($adapter.index -le 0) { $issues += 'interface-index-invalid' }
+    if ($adapter.admin -notin @('Up','Down')) { $issues += 'admin-state-unknown' }
+    if ($guids.ContainsKey($guid.ToString())) { $issues += 'duplicate-guid' }
+    $category = if ($adapter.identityProperties.hidden) { 'hidden' } elseif ($adapter.identityProperties.virtual) { 'virtual' } elseif ($adapter.identityProperties.hardware) { 'hardware' } else { 'unspecified' }
+    if ($issues.Count) { throw "Invalid adapter row=$row category=$category fields=$($issues -join ',') admin=$($adapter.admin)" }
+    $guids[$guid.ToString()] = $true; $row++
   }
   if (!@($Manifest.adapters | Where-Object admin -eq 'Up').Count) { throw 'No enabled external adapter' }
+}
+function Protect-SpikeEvidence([string]$Text, $Manifest, [string]$Root) {
+  $identities = @($Manifest.adapters | ForEach-Object { $_.guid; $_.device; $_.identityProperties.deviceId; $_.identityProperties.interfaceName; $_.identityProperties.netLuid } | Where-Object { ![string]::IsNullOrWhiteSpace([string]$_) -and [string]$_ -ne '0' } | ForEach-Object { [string]$_ } | Select-Object -Unique | Sort-Object Length -Descending)
+  foreach ($identity in $identities) {
+    $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($identity))).ToLowerInvariant()
+    $Text = $Text.Replace($identity, "sha256:$hash").Replace(($identity | ConvertTo-Json -Compress).Trim('"'), "sha256:$hash")
+  }
+  if (![string]::IsNullOrWhiteSpace($Root)) { $Text = $Text.Replace($Root, '[controller]').Replace(($Root | ConvertTo-Json -Compress).Trim('"'), '[controller]') }
+  $Text
 }
 function Assert-SpikeArm($Arm, $Manifest) {
   if (!$Arm -or $Arm.tick -le 0 -or $Arm.deadline -ne ($Arm.tick + $Manifest.seconds * [Diagnostics.Stopwatch]::Frequency) -or $Arm.child.id -le 0 -or $Arm.child.start -le 0 -or $Arm.supervisor.id -le 0 -or $Arm.supervisor.start -le 0) { throw 'Malformed monotonic arm or process identity' }
@@ -60,7 +75,8 @@ function Get-SpikeInventory {
   }
   $adapters = @($adapterObjects | ForEach-Object {
     $adapter = $_
-    @{ guid = $adapter.InterfaceGuid.ToString(); device = $adapter.PnPDeviceID; index = $adapter.ifIndex; admin = $adapter.AdminStatus.ToString(); status = $adapter.Status.ToString()
+    @{ guid = [string]$adapter.InterfaceGuid; device = $adapter.PnPDeviceID; index = $adapter.ifIndex; admin = [string]$adapter.AdminStatus; status = [string]$adapter.Status
+      identityProperties = @{ deviceId = $adapter.DeviceID; interfaceName = $adapter.InterfaceName; netLuid = [string]$adapter.NetLuid; interfaceIndex = $adapter.InterfaceIndex; interfaceAdminStatus = $adapter.InterfaceAdminStatus; hidden = $adapter.Hidden; virtual = $adapter.Virtual; hardware = $adapter.HardwareInterface; state = $adapter.State; availability = $adapter.Availability; configManagerErrorCode = $adapter.ConfigManagerErrorCode }
       bindings = @($bindingObjects | Where-Object { $_.Name -eq $adapter.Name -and $_.InterfaceDescription -eq $adapter.InterfaceDescription } | Select-Object ComponentID,Enabled) }
   })
   $interfaces = @(Get-NetIPInterface | Select-Object InterfaceIndex,InterfaceAlias,AddressFamily,ConnectionState)
@@ -324,12 +340,13 @@ function Invoke-SpikeRun {
     $probe = Join-Path $root 'probe.mjs'; Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'ci-network-probe.mjs') -Destination $probe
     'immutable-t00' | Set-Content -LiteralPath "$root\canary"
     $inventory = Get-SpikeInventory
+    $proof.beforeInventory = $inventory
     $manifest = @{ schema = 1; seconds = 15; mainPid = $PID; controllerSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value; adapters = $inventory.adapters; scenario = $Scenario; root = $root; childRoot = $childRoot; sid = $sid
       script = $scriptPath; scriptHash = (Get-FileHash $scriptPath).Hash.ToLowerInvariant(); probe = $probe; probeHash = (Get-FileHash $probe).Hash.ToLowerInvariant()
       pwsh = $tools.pwsh; node = $tools.node; address = (@(Resolve-DnsName github.com -Type A | Where-Object IPAddress | Select-Object -ExpandProperty IPAddress))[0] }
     Assert-SpikeManifest $manifest; Save-SpikeJson $manifest "$root\manifest.json"
     foreach ($path in @($root,$scriptPath,"$root\manifest.json",$manifest.pwsh,$manifest.node)) { Assert-SpikeSealed $path }
-    $proof.beforeInventory = $inventory; $proof.sources = @{ controller = $manifest.scriptHash; probe = $manifest.probeHash; commit = (& git rev-parse HEAD) }
+    $proof.sources = @{ controller = $manifest.scriptHash; probe = $manifest.probeHash; commit = (& git rev-parse HEAD) }
     $proof.tools = @{ runtimeHash = $tools.runtimeHash; runtimeFiles = $tools.runtimeFiles; pwshPath = $manifest.pwsh; nodePath = $manifest.node; pwsh = (Get-FileHash $manifest.pwsh).Hash; node = (Get-FileHash $manifest.node).Hash; powershellVersion = $PSVersionTable.PSVersion.ToString(); nodeVersion = (& $manifest.node --version); image = $env:ImageVersion; frequency = [Diagnostics.Stopwatch]::Frequency }
     $credential = [pscredential]::new("$env:COMPUTERNAME\$account", $secure)
     $baseline = Start-SpikeMode $manifest 'Child' $credential 'before'
@@ -388,18 +405,21 @@ function Invoke-SpikeRun {
       if ($registered -and (!(Test-Path "$root\arm.json") -or (Test-Path "$root\recovery.json"))) { Unregister-ScheduledTask -TaskName $task -Confirm:$false }
       if ($created) { Remove-LocalUser -Name $account }
     } catch { $proof.cleanupError = $_.Exception.Message; $proof.pass = $false }
-    Save-SpikeJson $proof (Join-Path $Output 'proof.json')
-    foreach ($name in @('ack.json','arm.json','release.json','recovery-fence.json','recovery.json','timeline.json','death.json','watchdog-error.json')) { if (Test-Path "$root\$name") { Copy-Item -LiteralPath "$root\$name" -Destination $Output } }
-    foreach ($log in Get-ChildItem -LiteralPath $root -File -Filter '*.stderr') { Copy-Item -LiteralPath $log.FullName -Destination $Output }
-    if ($manifest) {
-      foreach ($file in Get-ChildItem -LiteralPath $Output -File) {
-        $text = [string](Get-Content -LiteralPath $file.FullName -Raw)
-        foreach ($identity in @($manifest.adapters | ForEach-Object { $_.guid; $_.device })) {
-          $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($identity))).ToLowerInvariant()
-          $text = $text.Replace($identity, "sha256:$hash").Replace(($identity | ConvertTo-Json -Compress).Trim('"'), "sha256:$hash")
+    try {
+      $publicProof = Protect-SpikeEvidence ($proof | ConvertTo-Json -Depth 16) $manifest $root
+      Save-SpikeJson ($publicProof | ConvertFrom-Json -AsHashtable) (Join-Path $Output 'proof.json')
+      foreach ($name in @('ack.json','arm.json','release.json','recovery-fence.json','recovery.json','timeline.json','death.json','watchdog-error.json')) {
+        if (Test-Path "$root\$name") {
+          $publicReceipt = Protect-SpikeEvidence (Get-Content -LiteralPath "$root\$name" -Raw) $manifest $root
+          Save-SpikeJson ($publicReceipt | ConvertFrom-Json -AsHashtable) (Join-Path $Output $name)
         }
-        $text.Replace($root, '[controller]').Replace(($root | ConvertTo-Json -Compress).Trim('"'), '[controller]') | Set-Content -LiteralPath $file.FullName
       }
+      foreach ($log in Get-ChildItem -LiteralPath $root -File -Filter '*.stderr') {
+        Protect-SpikeEvidence (Get-Content -LiteralPath $log.FullName -Raw) $manifest $root | Set-Content -LiteralPath (Join-Path $Output $log.Name)
+      }
+    } catch {
+      if (!$proof.error) { throw }
+      Write-Warning "Evidence export failed ($($_.Exception.GetType().Name)); primary failure retained: $($proof.error)"
     }
   }
   if (!$proof.pass) { throw 'Spike proof or cleanup failed' }
