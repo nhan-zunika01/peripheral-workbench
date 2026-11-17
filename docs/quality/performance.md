@@ -31,7 +31,7 @@ Cả 16 tổ hợp UI lớn đều cải thiện p95 và p99 trong từng cặp.
 
 ## Cờ và giới hạn còn lại
 
-Báo cáo giữ cả 69 so sánh, không bỏ cờ theo noise floor. Có ít nhất một cặp tăng trên 10% ở 14/35 tổ hợp microbenchmark không đổi mã và 4/34 tổ hợp UI nhỏ/rỗng. Đáng chú ý, p99 native library save của case escaped ở cặp 2 tăng 76,6 lên 87,7 ms, dù median của ba p99 chỉ tăng khoảng 0,5%. Không coi mọi cờ này là nhiễu dưới mili giây, và không nghiệm thu điều kiện không regression trên toàn bộ hệ thống từ kết quả này.
+Báo cáo giữ cả 69 so sánh, không bỏ cờ theo noise floor. Có ít nhất một cặp tăng trên 10% ở 14/35 tổ hợp microbenchmark không đổi mã và 4/18 tổ hợp UI nhỏ/rỗng. Đáng chú ý, p99 native library save của case escaped ở cặp 2 tăng 76,6 lên 87,7 ms, dù median của ba p99 chỉ tăng khoảng 0,5%. Không coi mọi cờ này là nhiễu dưới mili giây, và không nghiệm thu điều kiện không regression trên toàn bộ hệ thống từ kết quả này.
 
 PerformanceObserver ghi nhận task trên 50 ms, gồm warm-up và có thể phần setup. Gán task vào stage chỉ gần đúng theo khoảng thời gian; số task không phải số event chính xác. Các task dài vẫn còn trong thao tác lớn, nhất là serialize/lưu; chưa bổ sung worker hay đổi quy tắc lưu để che chúng.
 

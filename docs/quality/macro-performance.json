@@ -141,7 +141,7 @@
     "frontendProjectTests": "PASS, 14 tests, zero failures",
     "staticCallerReview": "Validity is read synchronously, before view construction. Inline edits synchronize after invalid state is updated. Successful event mutations render and unsuccessful mutations synchronize.",
     "unchangedMicroStagesWithAnyPairAbove10Percent": "14/35",
-    "smallOrEmptyUiStagesWithAnyPairAbove10Percent": "4/34"
+    "smallOrEmptyUiStagesWithAnyPairAbove10Percent": "4/18"
   },
   "limits": [
     "The 100-escaped native storage and UI samples all include the expected quota-write failure; they are failure-path measurements.",
@@ -7675,7 +7675,7 @@
   "decision": {
     "acceptedScope": "Measured large-library UI improvement from removing duplicate sync and per-refresh validation work.",
     "notAccepted": "No universal no-regression, trusted-key/paint latency, companion benchmark, RSS/soak or full T05/T09 acceptance is claimed.",
-    "flagsPreserved": "All 69 comparisons retained; 14/35 unchanged micro and 4/34 small/empty UI combinations include at least one >10% pair flag.",
+    "flagsPreserved": "All 69 comparisons retained; 14/35 unchanged micro and 4/18 small/empty UI combinations include at least one >10% pair flag.",
     "p95Goal": "All measured large UI stages in the candidate are below the proposed 100 ms p95 on this reference machine."
   },
   "publicHarnessScope": "Adapted after the historical measurements; its driver hash is distinct. Source snapshots and metadata hardening are not retroactively assigned to earlier raw samples."
