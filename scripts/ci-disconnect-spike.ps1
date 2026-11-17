@@ -127,18 +127,54 @@ function Set-SpikeAcl([string]$Path, [string]$Sid, [string]$Rights = 'ReadAndExe
   Set-Acl -LiteralPath $Path -AclObject $acl
 }
 function Assert-SpikeSealed([string]$Path, [string]$ControllerSid = ([Security.Principal.WindowsIdentity]::GetCurrent().User.Value)) {
+  # Windows' servicing account owns Program Files; its SID cannot belong to the standard test account.
+  $trustedSids = @('S-1-5-18','S-1-5-32-544',$ControllerSid,'S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464')
   $current = Get-Item -LiteralPath $Path
   while ($current) {
-    if ($current.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Controller path contains a reparse point' }
+    $category = if ($current.FullName -eq $Path) { 'leaf' } else { 'ancestor' }
+    $safePath = $current.FullName -replace '(?i)([A-Z]:\\Users\\)[^\\]+', '$1[profile]'
+    if ($current.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "Unsafe ACL path category=$category path=$safePath rights=ReparsePoint" }
     $acl = Get-Acl -LiteralPath $current.FullName
+    $owner = $acl.GetOwner([Security.Principal.SecurityIdentifier]).Value
+    if ($owner -notin $trustedSids) { throw "Untrusted ACL principal=$owner rights=Owner/WriteDacl category=$category path=$safePath" }
+    $sddl = $acl.GetSecurityDescriptorSddlForm([Security.AccessControl.AccessControlSections]::Access)
+    if ($sddl -notmatch 'D:' -or $sddl -match 'NO_ACCESS_CONTROL') { throw "Untrusted ACL principal=Everyone rights=NullDacl category=$category path=$safePath" }
     foreach ($rule in $acl.GetAccessRules($true,$true,[Security.Principal.SecurityIdentifier])) {
-      $trusted = $rule.IdentityReference.Value -in @('S-1-5-18','S-1-5-32-544','S-1-3-0',$ControllerSid)
+      if ($rule.PropagationFlags -band [Security.AccessControl.PropagationFlags]::InheritOnly) { continue }
+      $trusted = $rule.IdentityReference.Value -in $trustedSids
       $danger = [Security.AccessControl.FileSystemRights]::Delete -bor [Security.AccessControl.FileSystemRights]::DeleteSubdirectoriesAndFiles -bor [Security.AccessControl.FileSystemRights]::ChangePermissions -bor [Security.AccessControl.FileSystemRights]::TakeOwnership
       if ($current.FullName -eq $Path -or !$current.PSIsContainer) { $danger = $danger -bor [Security.AccessControl.FileSystemRights]::Write -bor [Security.AccessControl.FileSystemRights]::Delete }
-      if (!$trusted -and $rule.AccessControlType -eq 'Allow' -and ($rule.FileSystemRights -band $danger)) { throw 'Untrusted controller or ancestor ACL permits modification' }
+      if (!$trusted -and $rule.AccessControlType -eq 'Allow' -and ($rule.FileSystemRights -band $danger)) { throw "Untrusted ACL principal=$($rule.IdentityReference.Value) rights=$($rule.FileSystemRights) category=$category path=$safePath" }
     }
     $current = if ($current.PSIsContainer) { $current.Parent } else { $current.Directory }
   }
+}
+function Install-SpikeTools([string]$Root, [string]$Pwsh, [string]$Node) {
+  Assert-SpikeSealed $Root
+  $sourceRoot = Split-Path -Parent $Pwsh
+  $sourceItems = @(Get-Item -LiteralPath $sourceRoot) + @(Get-ChildItem -LiteralPath $sourceRoot -Recurse -Force)
+  foreach ($item in $sourceItems) { Assert-SpikeSealed $item.FullName }
+  if ((Get-Item -LiteralPath $Node).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Node preparation source is a reparse point' }
+  $runtime = Join-Path $Root 'powershell'
+  New-Item -ItemType Directory -Path $runtime | Out-Null
+  Get-ChildItem -LiteralPath $sourceRoot -Force | Copy-Item -Destination $runtime -Recurse
+  $nodeCopy = Join-Path $Root 'node.exe'; Copy-Item -LiteralPath $Node -Destination $nodeCopy
+  $nodeHash = (Get-FileHash -LiteralPath $Node).Hash
+  if ((Get-FileHash -LiteralPath $nodeCopy).Hash -cne $nodeHash) { throw 'Node copy bytes differ from the provisioned source' }
+  Assert-SpikeSealed $nodeCopy
+  $files = foreach ($item in $sourceItems) {
+    $relative = [IO.Path]::GetRelativePath($sourceRoot, $item.FullName)
+    $destination = [IO.Path]::GetFullPath((Join-Path $runtime $relative))
+    if ($destination -ne $runtime -and !$destination.StartsWith("$runtime\", [StringComparison]::OrdinalIgnoreCase)) { throw 'PowerShell copy escaped the immutable runtime' }
+    Assert-SpikeSealed $destination
+    if (!$item.PSIsContainer) {
+      $hash = (Get-FileHash -LiteralPath $item.FullName).Hash
+      if ((Get-FileHash -LiteralPath $destination).Hash -cne $hash) { throw 'PowerShell runtime copy bytes differ from the provisioned source' }
+      @{ path = $relative; sha256 = $hash.ToLowerInvariant() }
+    }
+  }
+  $receipt = @($files | Sort-Object path) | ConvertTo-Json -Compress
+  @{ pwsh = (Join-Path $runtime 'pwsh.exe'); node = $nodeCopy; runtimeFiles = @($files).Count; runtimeHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($receipt))).ToLowerInvariant() }
 }
 function Wait-SpikeFile([string]$Path, [int]$Seconds = 30) {
   $until = (Get-SpikeTick) + $Seconds * [Diagnostics.Stopwatch]::Frequency
@@ -260,12 +296,13 @@ function Invoke-SpikeRun {
   if (Test-Path -LiteralPath $Output) { throw 'Evidence output must be new' }
   New-Item -ItemType Directory -Path $Output | Out-Null
   $proof = @{ scenario = $Scenario; pass = $false; limitation = '15-second guest NIC feasibility only; VM loss means no proof; T00 remains open.' }
-  $root = Join-Path $env:RUNNER_TEMP ("t00-" + [guid]::NewGuid().ToString('N'))
+  $root = Join-Path ([Environment]::GetFolderPath('ProgramFiles')) ("T00-" + [guid]::NewGuid().ToString('N'))
   $account = 't00' + [guid]::NewGuid().ToString('N').Substring(0,12); $task = "T00-$account"
   $created = $false; $registered = $false; $manifest = $null; $child = $null; $owned = [Collections.Generic.List[object]]::new()
   try {
     New-Item -ItemType Directory -Path $root | Out-Null; Set-SpikeAcl $root ''
     Assert-SpikeSealed $root
+    $tools = Install-SpikeTools $root (Get-Command pwsh.exe).Source (Get-Command node.exe).Source
     $password = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(36)) + 'aA1!'
     Write-Output "::add-mask::$password"
     $secure = ConvertTo-SecureString $password -AsPlainText -Force; $password = $null
@@ -283,11 +320,11 @@ function Invoke-SpikeRun {
     $inventory = Get-SpikeInventory
     $manifest = @{ schema = 1; seconds = 15; mainPid = $PID; controllerSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value; adapters = $inventory.adapters; scenario = $Scenario; root = $root; childRoot = $childRoot; sid = $sid
       script = $scriptPath; scriptHash = (Get-FileHash $scriptPath).Hash.ToLowerInvariant(); probe = $probe; probeHash = (Get-FileHash $probe).Hash.ToLowerInvariant()
-      pwsh = (Get-Command pwsh.exe).Source; node = (Get-Command node.exe).Source; address = (@(Resolve-DnsName github.com -Type A | Where-Object IPAddress | Select-Object -ExpandProperty IPAddress))[0] }
+      pwsh = $tools.pwsh; node = $tools.node; address = (@(Resolve-DnsName github.com -Type A | Where-Object IPAddress | Select-Object -ExpandProperty IPAddress))[0] }
     Assert-SpikeManifest $manifest; Save-SpikeJson $manifest "$root\manifest.json"
     foreach ($path in @($root,$scriptPath,"$root\manifest.json",$manifest.pwsh,$manifest.node)) { Assert-SpikeSealed $path }
     $proof.beforeInventory = $inventory; $proof.sources = @{ controller = $manifest.scriptHash; probe = $manifest.probeHash; commit = (& git rev-parse HEAD) }
-    $proof.tools = @{ pwshPath = $manifest.pwsh; nodePath = $manifest.node; pwsh = (Get-FileHash $manifest.pwsh).Hash; node = (Get-FileHash $manifest.node).Hash; powershellVersion = $PSVersionTable.PSVersion.ToString(); nodeVersion = (& $manifest.node --version); image = $env:ImageVersion; frequency = [Diagnostics.Stopwatch]::Frequency }
+    $proof.tools = @{ runtimeHash = $tools.runtimeHash; runtimeFiles = $tools.runtimeFiles; pwshPath = $manifest.pwsh; nodePath = $manifest.node; pwsh = (Get-FileHash $manifest.pwsh).Hash; node = (Get-FileHash $manifest.node).Hash; powershellVersion = $PSVersionTable.PSVersion.ToString(); nodeVersion = (& $manifest.node --version); image = $env:ImageVersion; frequency = [Diagnostics.Stopwatch]::Frequency }
     $credential = [pscredential]::new("$env:COMPUTERNAME\$account", $secure)
     $baseline = Start-SpikeMode $manifest 'Child' $credential 'before'
     $owned.Add($baseline)

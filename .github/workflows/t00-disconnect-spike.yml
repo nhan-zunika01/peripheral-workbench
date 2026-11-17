@@ -38,7 +38,15 @@ jobs:
           Invoke-WebRequest "$uri/hashes.sha256" -OutFile "$archive.sha256"
           $expected = (Get-Content "$archive.sha256" | Where-Object { $_ -match '\s\*?PowerShell-7\.5\.4-win-x64\.zip$' }) -split '\s+'
           if ($expected.Count -ne 2 -or (Get-FileHash $archive).Hash -ine $expected[0]) { throw 'PowerShell checksum mismatch' }
-          $destination = Join-Path $env:RUNNER_TEMP 'powershell-7.5.4'
+          $destination = Join-Path ([Environment]::GetFolderPath('ProgramFiles')) ('T00-PowerShell-' + [guid]::NewGuid().ToString('N'))
+          New-Item -ItemType Directory -Path $destination | Out-Null
+          $acl = [Security.AccessControl.DirectorySecurity]::new()
+          $acl.SetAccessRuleProtection($true, $false)
+          $acl.SetOwner([Security.Principal.SecurityIdentifier]'S-1-5-32-544')
+          foreach ($entry in @(@('S-1-5-18','FullControl'), @('S-1-5-32-544','FullControl'), @('S-1-5-32-545','ReadAndExecute'))) {
+            $acl.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new([Security.Principal.SecurityIdentifier]$entry[0], $entry[1], 'ContainerInherit,ObjectInherit', 'None', 'Allow'))
+          }
+          Set-Acl -LiteralPath $destination -AclObject $acl
           Expand-Archive $archive $destination
           $destination | Out-File $env:GITHUB_PATH -Append
       - name: Check controller with mocked platform operations

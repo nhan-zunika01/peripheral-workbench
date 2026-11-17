@@ -5,6 +5,8 @@ if (!(Test-Path -LiteralPath $source)) { throw 'Missing hosted spike controller'
 . $source
 $stopImplementation = ${function:Stop-SpikeChild}
 $setImplementation = ${function:Set-SpikeAdapter}
+$sealedImplementation = ${function:Assert-SpikeSealed}
+$installImplementation = ${function:Install-SpikeTools}
 function Assert-Throws([scriptblock]$Action, [string]$Name) {
   $failed = $false
   try { & $Action } catch { $failed = $true }
@@ -126,6 +128,84 @@ foreach ($fenceCase in @('fenced','deadline-during-disable')) {
   if ($script:events.Count -ne $expectedCount -or $script:saved.ContainsKey('C:\sealed\release.json')) { throw 'Supervisor disabled an adapter after recovery fenced it' }
 }
 Remove-Item Function:\Test-Path,Function:\Get-Process
-Write-Output 'PASS hosted spike guards, malformed state, ACK, child failure, adapter restoration and deadline checks (platform operations mocked)'
-
-
+$adminSid = 'S-1-5-32-544'; $usersSid = 'S-1-5-32-545'; $controllerSid = 'S-1-5-21-500'
+function New-AclRule([string]$Sid, [string]$Rights, [string]$Propagation = 'None') {
+  [pscustomobject]@{ IdentityReference = [pscustomobject]@{ Value = $Sid }; FileSystemRights = [Security.AccessControl.FileSystemRights]$Rights; AccessControlType = 'Allow'; PropagationFlags = [Security.AccessControl.PropagationFlags]$Propagation }
+}
+function New-AclFixture([string]$Owner, $Rules) {
+  $acl = [pscustomobject]@{ owner = $Owner; rules = @($Rules); sddl = 'D:' }
+  $acl | Add-Member ScriptMethod GetAccessRules { param($Explicit,$Inherited,$IdentityType) $this.rules }
+  $acl | Add-Member ScriptMethod GetOwner { param($IdentityType) [pscustomobject]@{ Value = $this.owner } }
+  $acl | Add-Member ScriptMethod GetSecurityDescriptorSddlForm { param($Sections) $this.sddl }
+  $acl
+}
+$aclParent = [pscustomobject]@{ FullName = 'C:\Program Files'; PSIsContainer = $true; Attributes = [IO.FileAttributes]::Directory; Parent = $null }
+$aclLeaf = [pscustomobject]@{ FullName = 'C:\Program Files\T00-test'; PSIsContainer = $true; Attributes = [IO.FileAttributes]::Directory; Parent = $aclParent }
+$script:aclRows = @{
+  $aclLeaf.FullName = (New-AclFixture $usersSid @((New-AclRule $adminSid 'FullControl')))
+  $aclParent.FullName = (New-AclFixture $adminSid @((New-AclRule $adminSid 'FullControl')))
+}
+function Get-Item { param($LiteralPath) $aclLeaf }
+function Get-Acl { param($LiteralPath) $script:aclRows[$LiteralPath] }
+Assert-Throws { & $sealedImplementation $aclLeaf.FullName $controllerSid } 'untrusted owner can replace the controller DACL'
+$script:aclRows[$aclLeaf.FullName] = New-AclFixture $adminSid @((New-AclRule $adminSid 'FullControl'))
+foreach ($unsafeRight in @('DeleteSubdirectoriesAndFiles','Delete','ChangePermissions','TakeOwnership')) {
+  $script:aclRows[$aclParent.FullName] = New-AclFixture $adminSid @((New-AclRule $usersSid $unsafeRight))
+  Assert-Throws { & $sealedImplementation $aclLeaf.FullName $controllerSid } "ancestor $unsafeRight"
+}
+$script:aclRows[$aclParent.FullName] = New-AclFixture $adminSid @((New-AclRule $usersSid 'WriteData,AppendData'),(New-AclRule $usersSid 'Modify' 'InheritOnly'))
+& $sealedImplementation $aclLeaf.FullName $controllerSid
+$script:aclRows[$aclLeaf.FullName] = New-AclFixture $adminSid @((New-AclRule $usersSid 'WriteData'))
+Assert-Throws { & $sealedImplementation $aclLeaf.FullName $controllerSid } 'write permission on controller leaf'
+$script:aclRows[$aclLeaf.FullName] = New-AclFixture $adminSid @((New-AclRule $adminSid 'FullControl'))
+$script:aclRows[$aclLeaf.FullName].sddl = 'D:NO_ACCESS_CONTROL'
+Assert-Throws { & $sealedImplementation $aclLeaf.FullName $controllerSid } 'null controller DACL'
+$script:aclRows[$aclLeaf.FullName].sddl = ''
+Assert-Throws { & $sealedImplementation $aclLeaf.FullName $controllerSid } 'missing controller DACL'
+$script:aclRows[$aclLeaf.FullName].sddl = 'D:'
+$trustedInstaller = 'S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464'
+$script:aclRows[$aclParent.FullName] = New-AclFixture $trustedInstaller @((New-AclRule $trustedInstaller 'FullControl'),(New-AclRule $usersSid 'ReadAndExecute'))
+& $sealedImplementation $aclLeaf.FullName $controllerSid
+$aclParent.FullName = 'C:\Users\private-profile\mutable-tool-cache'
+$aclLeaf.FullName = Join-Path $aclParent.FullName 'powershell'
+$script:aclRows[$aclLeaf.FullName] = New-AclFixture $adminSid @((New-AclRule $adminSid 'FullControl'))
+$script:aclRows[$aclParent.FullName] = New-AclFixture $adminSid @((New-AclRule $usersSid 'DeleteSubdirectoriesAndFiles'))
+$message = ''
+try { & $sealedImplementation $aclLeaf.FullName $controllerSid } catch { $message = $_.Exception.Message }
+if ($message -notmatch 'principal=S-1-5-32-545' -or $message -notmatch 'rights=DeleteSubdirectoriesAndFiles' -or $message -notmatch 'category=ancestor' -or $message -match 'private-profile' -or $message -notmatch '\[profile\]') { throw 'ACL failure diagnostics did not identify and redact the rejected ancestor' }
+$script:accountAttempts = 0; $script:toolChecked = $false; $script:saved = @{}
+function Test-Path { param($LiteralPath,$Path) $false }
+function New-Item { param($ItemType,$Path) }
+function Set-SpikeAcl { param($Path,$Sid,$Rights) }
+function Assert-SpikeSealed { param($Path,$ControllerSid) }
+function Get-ChildItem { param($LiteralPath,[switch]$File,$Filter,$ErrorAction) }
+function Install-SpikeTools {
+  param($Root,$Pwsh,$Node)
+  $script:toolChecked = $true
+  & $sealedImplementation $aclLeaf.FullName $controllerSid
+}
+function New-LocalUser { param($Name,$Password,[switch]$AccountNeverExpires,[switch]$PasswordNeverExpires) $script:accountAttempts++; throw 'Account creation preceded immutable tool preparation' }
+$oldTemp = $env:RUNNER_TEMP; $env:RUNNER_TEMP = 'C:\mutable-runner-temp'
+try { Invoke-SpikeRun 1>$null } catch { $setupError = $_.Exception.Message } finally { $env:RUNNER_TEMP = $oldTemp }
+if (!$script:toolChecked -or $script:accountAttempts -ne 0 -or $setupError -notmatch 'category=ancestor') { throw 'Setup reached account creation before rejecting the replaceable bootstrap runtime' }
+Remove-Item Function:\Test-Path,Function:\New-Item,Function:\Get-ChildItem,Function:\New-LocalUser
+Remove-Item Function:\Get-Item,Function:\Get-Acl
+$script:sealedPaths = [Collections.Generic.List[string]]::new(); $script:copies = [Collections.Generic.List[string]]::new(); $script:copyMismatch = $false
+function Assert-SpikeSealed([string]$Path) { $script:sealedPaths.Add($Path); if ($Path -like 'C:\mutable-runtime*') { throw 'Mutable bootstrap runtime rejected' } }
+function Get-Item([string]$LiteralPath) { [pscustomobject]@{ FullName = $LiteralPath; Attributes = [IO.FileAttributes]::Normal; PSIsContainer = $LiteralPath -notmatch '\.exe$' } }
+function Get-ChildItem([string]$LiteralPath, [switch]$Recurse, [switch]$Force) {
+  foreach ($relative in @('pwsh.exe','engine.dll','Modules\fixture.psm1')) { [pscustomobject]@{ FullName = (Join-Path $LiteralPath $relative); PSIsContainer = $false } }
+}
+function New-Item { param($ItemType,$Path) }
+function Copy-Item { param($LiteralPath,$Destination,[switch]$Recurse,[Parameter(ValueFromPipeline)]$InputObject) process { $script:copies.Add($Destination) } }
+function Get-FileHash([string]$LiteralPath) { @{ Hash = if ($script:copyMismatch -and $LiteralPath -eq 'C:\Program Files\T00-sealed\powershell\engine.dll') { 'b' * 64 } else { 'a' * 64 } } }
+$installed = & $installImplementation 'C:\Program Files\T00-sealed' 'C:\sealed-bootstrap\pwsh.exe' 'D:\mutable-cache\node.exe'
+if ($installed.node -cne 'C:\Program Files\T00-sealed\node.exe' -or $installed.pwsh -cne 'C:\Program Files\T00-sealed\powershell\pwsh.exe' -or $installed.runtimeFiles -ne 3 -or $installed.runtimeHash -notmatch '^[a-f0-9]{64}$') { throw 'Tools escaped the sealed run root or omitted runtime dependencies' }
+foreach ($target in @('C:\Program Files\T00-sealed\powershell\engine.dll','C:\Program Files\T00-sealed\powershell\Modules\fixture.psm1','C:\Program Files\T00-sealed\node.exe')) { if ($script:sealedPaths -notcontains $target) { throw 'Copied tool dependency ACL was not verified' } }
+$script:copyMismatch = $true
+Assert-Throws { & $installImplementation 'C:\Program Files\T00-sealed' 'C:\sealed-bootstrap\pwsh.exe' 'D:\mutable-cache\node.exe' } 'changed runtime copy bytes'
+$script:copies.Clear()
+Assert-Throws { & $installImplementation 'C:\Program Files\T00-sealed' 'C:\mutable-runtime\pwsh.exe' 'D:\mutable-cache\node.exe' } 'replaceable parent bootstrap runtime'
+if ($script:copies.Count) { throw 'Tool copying started before bootstrap trust validation' }
+Remove-Item Function:\Get-Item,Function:\Get-ChildItem,Function:\New-Item,Function:\Copy-Item,Function:\Get-FileHash
+Write-Output 'PASS hosted spike guards, recovery fences, deadline independence and immutable-path ACL checks (platform operations mocked)'
