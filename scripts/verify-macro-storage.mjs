@@ -118,6 +118,18 @@ try {
     await keyDelay.fill('60001'); await keyInput.fill('D');
     assert.match(await keyCard.locator('.macro-event-delay').textContent(), /22 ms/);
     assert.match(await keyCard.getAttribute('aria-label'), /D, 22 ms/);
+    await keyInput.fill(''); await name.fill('Still editing');
+    assert.equal(await page.locator('[data-macro-action=export]').isDisabled(), true);
+    assert.equal(await page.locator('[data-macro-action=save]').isDisabled(), true);
+    assert.doesNotMatch(await page.locator('#macro-status').textContent(), /Macro data saved in this browser/);
+    await keyInput.fill('E');
+    assert.equal(await keyInput.evaluate(input => document.activeElement === input), true);
+    assert.equal(await keyDelay.getAttribute('aria-invalid'), 'true');
+    assert.equal(await page.locator('[data-macro-action=save]').isDisabled(), true);
+    await keyDelay.fill('23');
+    assert.equal(await page.locator('[data-macro-action=export]').isEnabled(), true);
+    assert.equal(await page.locator('[data-macro-action=save]').isEnabled(), true);
+    assert.deepEqual((await saved(page)).macros[0].events[1], { kind: 'key', input: 'E', action: 'down', delayMs: 23 });
     await shared.close();
   });
   await check('retry rereads storage after a transient failure while keeping the lock', async () => {

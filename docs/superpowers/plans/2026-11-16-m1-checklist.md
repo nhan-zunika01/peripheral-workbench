@@ -34,7 +34,7 @@ Trạng thái ngày 17/11/2026, sau GREEN5, review độc lập, kiểm chứng 
 - [x] Parser và picker dùng chung trần 32.000.000 byte; kiểm thử biên nhận đúng 32.000.000 byte và từ chối 32.000.001 byte. Xem `public/macros.js`, `public/macro-view.js`, `tests/qa-local-drafts.test.mjs` và `test-results/m1/GREEN2/macro-storage.stdout`.
 - [x] Bộ dữ liệu 100 macro × 500 key event với Unicode cần escape xuất và nhập lại dưới trần; kiểm thử xác nhận nội dung và ID mới. Browser QA cũng chạy qua picker, kể cả khi quota lưu thất bại. Xem `tests/qa-local-drafts.test.mjs` và `test-results/m1/GREEN2/macro-storage.stdout`.
 - [x] Đã kiểm việc giữ draft khi tải backup lỗi, cùng đầy đủ ca round-trip, quota và giới hạn picker/parser trong GREEN5.
-- [ ] Đo thời gian parse/export/save ở biên theo T05 khi đến chặng hiệu suất; chưa coi kết quả chức năng là benchmark.
+- [x] Đã đo phần UI macro theo T05/T08: ba cặp baseline/ứng viên xen kẽ, 20 warm-up và 100 mẫu mỗi stage/lượt tại 0/1/100 macro × 500 event. [Báo cáo](../../quality/performance.md) ghi đủ p95/p99, quota failures và các cờ trên 10%. Đây chưa phải nghiệm thu đầy đủ benchmark companion, RSS hoặc soak.
 
 ## Các vòng kiểm và bàn giao
 

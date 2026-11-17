@@ -51,6 +51,8 @@ playwright-report/
 !/docs/quality/m0-evidence.json
 !/docs/quality/m0-validation.json
 !/docs/quality/m1-validation.json
+!/docs/quality/macro-performance.json
+!/docs/quality/performance.md
 !/docs/legal/
 /docs/legal/*
 !/docs/legal/provenance.csv

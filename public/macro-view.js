@@ -13,15 +13,15 @@ const eventValue = event => event.kind === 'key' ? event.input || t('eventInput'
 const eventDelay = event => event.kind === 'delay' ? '' : `${event.delayMs} ms ${t('delayBeforeShort')}`;
 let libraryOpen, libraryMode;
 
-export function macroStatusText(library, message = '') {
-  const notice = message || (!library.valid ? 'macroInvalid' : '');
+export function macroStatusText(library, message = '', valid = library.valid) {
+  const notice = message || (!valid ? 'macroInvalid' : '');
   const keys = [notice, notice === 'macroInvalid' && library.status === 'macroSaved' ? '' : library.status];
   if (library.access === 'memory') keys.push('macroLockUnavailable');
   if (library.access === 'readonly') keys.push('macroReadOnly');
   return [...new Set(keys.filter(Boolean))].map(key => t(key)).join(' ');
 }
 
-export function macrosPage(library, selectedId, selectedIndex, search, actions) {
+export function macrosPage(library, selectedId, selectedIndex, search, actions, valid = library.valid) {
   const view = el('div', 'macros-page');
   const header = el('header', 'view-header macro-heading'), heading = el('div');
   heading.append(el('h1', '', t('macros')), el('p', 'view-subtitle', t('macroLibraryHelp')));
@@ -39,7 +39,7 @@ export function macrosPage(library, selectedId, selectedIndex, search, actions) 
       document.body.append(anchor); anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 0); actions.setMacroMessage('macroExported');
     } catch (error) { actions.setMacroMessage(error?.message === 'macroFormat' ? 'macroFormat' : 'macroExportFailed'); }
   });
-  exportButton.dataset.action = 'export-macros'; exportButton.dataset.macroAction = 'export'; exportButton.disabled = !library.valid;
+  exportButton.dataset.action = 'export-macros'; exportButton.dataset.macroAction = 'export'; exportButton.disabled = !valid;
   const fileActions = el('div', 'actions macro-file-actions'); fileActions.append(picker, importButton, exportButton);
   if (!library.writable && actions.canAcquireMacroWriter) {
     const retry = button(t('macroTryWriter'), actions.acquireMacroWriter); retry.id = 'macro-try-writer'; fileActions.append(retry);
@@ -86,7 +86,7 @@ export function macrosPage(library, selectedId, selectedIndex, search, actions) 
   const details = el('section', 'panel macro-inspector', null, { 'aria-labelledby': 'macro-inspector-title' });
   sequence.append(el('h2', '', t('sequence'), { id: 'macro-sequence-title' }));
   details.append(el('h2', '', t('eventDetails'), { id: 'macro-inspector-title' }));
-  const status = el('p', 'setting-status macro-status', macroStatusText(library, actions.macroMessage), { id: 'macro-status', role: 'status', 'aria-live': 'polite' });
+  const status = el('p', 'setting-status macro-status', macroStatusText(library, actions.macroMessage, valid), { id: 'macro-status', role: 'status', 'aria-live': 'polite' });
 
   if (!macro) {
     const empty = el('div', 'macro-sequence-empty'); empty.append(el('h3', '', t('createMacroTitle')), el('p', 'muted', t('macroEmpty')), el('p', 'macro-runtime-note', t('macroRuntimeUnavailable')));
@@ -189,7 +189,7 @@ export function macrosPage(library, selectedId, selectedIndex, search, actions) 
     details.append(controls);
   }
 
-  const save = button(t('saveMacros'), actions.saveMacros, 'primary'); save.id = 'save-macros'; save.dataset.macroAction = 'save'; save.dataset.action = 'save-macros'; save.disabled = !library.valid || !library.writable;
+  const save = button(t('saveMacros'), actions.saveMacros, 'primary'); save.id = 'save-macros'; save.dataset.macroAction = 'save'; save.dataset.action = 'save-macros'; save.disabled = !valid || !library.writable;
   details.append(status, save); layout.append(sequence, details); view.append(layout); return finish(view, library);
 }
 
