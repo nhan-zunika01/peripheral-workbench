@@ -147,7 +147,7 @@
     "The 100-escaped native storage and UI samples all include the expected quota-write failure; they are failure-path measurements.",
     "Frame timing ends at the next animation frame before paint. Synthetic interactions use an isolated browser context and local server.",
     "Recorded CPU, browser, power, battery, Node, and Playwright match across runs. Background load and other unrecorded system state were not controlled.",
-    "The script path determines its raw.json output location and the working directory determines the source root. Existing comparison hardcodes local paths and pinned hashes. A public harness needs portable paths and a safe non-overwriting output destination before use.",
+    "Historical driver: The script path determines its raw.json output location and the working directory determines the source root. Existing comparison hardcodes local paths and pinned hashes. A public harness needs portable paths and a safe non-overwriting output destination before use. The public benchmark-macros.mjs now provides explicit portable source/output selection and refuses output overwrite.",
     "A greater-than-10-percent flag in an unchanged microbenchmark does not prove or disprove a code regression. Pair 2 of 100-escaped native library save rose from 76.6 to 87.7 ms p99, a 14.5 percent increase, while the three-run median p99 rose by 0.5 percent."
   ],
   "comparison": [
@@ -7677,5 +7677,6 @@
     "notAccepted": "No universal no-regression, trusted-key/paint latency, companion benchmark, RSS/soak or full T05/T09 acceptance is claimed.",
     "flagsPreserved": "All 69 comparisons retained; 14/35 unchanged micro and 4/34 small/empty UI combinations include at least one >10% pair flag.",
     "p95Goal": "All measured large UI stages in the candidate are below the proposed 100 ms p95 on this reference machine."
-  }
+  },
+  "publicHarnessScope": "Adapted after the historical measurements; its driver hash is distinct. Source snapshots and metadata hardening are not retroactively assigned to earlier raw samples."
 }

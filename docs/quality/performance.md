@@ -45,6 +45,6 @@ Cài dependency theo lockfile và Chromium của Playwright trước khi chạy.
 node scripts/benchmark-macros.mjs --output test-results/macro-benchmark
 ```
 
-Có thể dùng `--source-root` trỏ tới một checkout khác khi so sánh hai phiên bản. Mặc định là 20 warm-up, 100 mẫu và 3 lượt; các biến `MACRO_WARMUP`, `MACRO_SAMPLES`, `MACRO_ROUNDS` hỗ trợ smoke. Dưới 100 mẫu không báo percentile. Dùng cùng driver, browser và phương pháp cho hai phía; giữ raw.json và source hashes trước khi đổi mã.
+Có thể dùng `--source-root` trỏ tới một checkout khác khi so sánh hai phiên bản. Mặc định là 20 warm-up, 100 mẫu và 3 lượt; các biến `MACRO_WARMUP`, `MACRO_SAMPLES`, `MACRO_ROUNDS` hỗ trợ smoke. Dưới 100 mẫu không báo percentile. Dùng cùng driver, browser và phương pháp cho hai phía; giữ raw.json và source hashes trước khi đổi mã. Harness public giữ một snapshot byte bất biến của public source trong RAM và chỉ phục vụ snapshot đó; sửa/xóa/thêm file sau khi chụp không được dùng trong lượt đo hiện tại. Muốn đo mã mới phải chạy lượt khác. Lockfile của source và của checkout chứa driver được ghi riêng, cùng version và hash package.json thực tế của Playwright.
 
 Công cụ chỉ dùng dữ liệu giả, origin loopback do nó sở hữu và browser context mới. Request tới companion hoặc origin ngoài, cùng WebSocket, bị chặn. Nó không dùng kho macro hoặc profile browser đang có của người dùng. Đây là harness UI macro; chưa phải toàn bộ benchmark companion của T05.

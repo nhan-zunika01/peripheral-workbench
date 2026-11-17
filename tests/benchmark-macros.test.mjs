@@ -85,6 +85,43 @@ test('uses nearest-rank percentiles and omits percentiles for small samples', as
   assert.equal(full.p95, 95); assert.equal(full.p99, 99);
 });
 
+test('serves captured public bytes and rejects files added after capture', async () => withTemp(async dir => {
+  const { captureSource, createBenchmarkServer } = await import('../scripts/benchmark-macros.mjs');
+  assert.equal(typeof captureSource, 'function', 'source capture is available');
+  assert.equal(typeof createBenchmarkServer, 'function', 'snapshot server is available');
+  assert.equal(spawnSync('git', ['init', '-q', dir]).status, 0);
+  await mkdir(join(dir, 'public'));
+  await writeFile(join(dir, 'package.json'), 'source package A');
+  await writeFile(join(dir, 'package-lock.json'), 'source lock A');
+  await writeFile(join(dir, 'public', 'index.html'), 'version A');
+  await writeFile(join(dir, 'public', 'old.js'), 'old asset');
+  await mkdir(join(dir, 'public', 'assets'));
+  await writeFile(join(dir, 'public', 'assets', 'space file.svg'), '<svg></svg>');
+  const snapshot = await captureSource(dir);
+  assert.equal(snapshot.hashes['public/index.html'], '29d00a28617eba751825e0a25e75732e3ff01b41badfdbc428fb6e3c753a44fa');
+  assert.equal(snapshot.hashes['package-lock.json'], '374ba75880c91ff59ffeb823e7fe49146abad499b587db15467a93cf23e8abaf');
+  await writeFile(join(dir, 'package-lock.json'), 'source lock B');
+  await writeFile(join(dir, 'public', 'index.html'), 'version B');
+  await rm(join(dir, 'public', 'old.js'));
+  await writeFile(join(dir, 'public', 'new.js'), 'new asset');
+  const server = createBenchmarkServer(snapshot);
+  await new Promise(done => server.listen(0, '127.0.0.1', done));
+  try {
+    const base = `http://127.0.0.1:${server.address().port}`;
+    const index = await fetch(`${base}/`);
+    assert.equal(index.status, 200);
+    assert.equal(await index.text(), 'version A');
+    assert.equal(await (await fetch(`${base}/old.js`)).text(), 'old asset');
+    const asset = await fetch(`${base}/assets/space%20file.svg`);
+    assert.equal(asset.status, 200);
+    assert.equal(await asset.text(), '<svg></svg>');
+    assert.equal((await fetch(`${base}/new.js`)).status, 404);
+    assert.equal((await fetch(`${base}/%zz`)).status, 404);
+  } finally {
+    await new Promise(done => server.close(done));
+  }
+}));
+
 test('reports a missing browser instead of skipping the isolation gate', async () => withTemp(async dir => {
   const browsers = join(dir, 'no-browsers');
   await mkdir(browsers);

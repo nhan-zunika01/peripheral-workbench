@@ -5,7 +5,7 @@ import { createServer } from 'node:http';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import os from 'node:os';
-import { dirname, extname, resolve, sep } from 'node:path';
+import { dirname, extname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const driver = fileURLToPath(import.meta.url), moduleRoot = resolve(dirname(driver), '..');
@@ -37,6 +37,29 @@ export const summary = samples => {
   return { n: values.length, errors: errorCounts, ...(values.length >= 100 ? { p50: percentile(values, 0.50), p95: percentile(values, 0.95), p99: percentile(values, 0.99) } : {}), min: Math.min(...values), max: Math.max(...values) };
 };
 
+const sha = bytes => createHash('sha256').update(bytes).digest('hex');
+
+export async function captureSource(root) {
+  const files = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', 'public', 'package-lock.json', 'package.json'], { cwd: root, encoding: 'utf8' }).split('\0').filter(Boolean);
+  const entries = await Promise.all(files.map(async file => [file, await readFile(resolve(root, file))]));
+  return {
+    hashes: Object.fromEntries(entries.map(([file, bytes]) => [file, sha(bytes)])),
+    publicFiles: new Map(entries.filter(([file]) => file.startsWith('public/')).map(([file, bytes]) => [file.slice('public'.length), bytes]))
+  };
+}
+
+export function createBenchmarkServer(snapshot) {
+  return createServer((request, response) => {
+    let pathname;
+    try { pathname = decodeURIComponent(new URL(request.url, 'http://localhost').pathname); }
+    catch { response.writeHead(404).end(); return; }
+    if (pathname === '/bench') { response.writeHead(200, { 'Content-Type': 'text/html' }).end('<!doctype html><title>Isolated macro benchmark</title>'); return; }
+    const file = pathname === '/' ? '/index.html' : pathname, data = snapshot.publicFiles.get(file);
+    if (!data) { response.writeHead(404).end(); return; }
+    response.writeHead(200, { 'Content-Type': { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.svg': 'image/svg+xml' }[extname(file)] || 'application/octet-stream' }).end(data);
+  });
+}
+
 export async function isolatedContext(browser, base, report, redact = String) {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce', serviceWorkers: 'block' });
   await ctx.route('**/*', route => {
@@ -52,26 +75,27 @@ export async function isolatedContext(browser, base, report, redact = String) {
 
 async function main() {
 const { output, sourceRoot: root, warmup, count, rounds } = parseOptions(process.argv.slice(2));
-const publicRoot = resolve(root, 'public');
 await mkdir(dirname(output), { recursive: true });
 await mkdir(output);
 const { chromium } = await import('playwright');
 const require = createRequire(import.meta.url);
+const playwrightPackage = await readFile(require.resolve('playwright/package.json'));
 const vector = Array.from({ length: 100 }, (_, i) => i + 1);
 assert.equal(percentile(vector, 0.95), 95); assert.equal(percentile(vector, 0.99), 99);
-const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
 const command = (exe, args) => { try { return execFileSync(exe, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { return 'unavailable'; } };
 const npm = process.platform === 'win32' ? command(process.execPath, [resolve(dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js'), '--version']) : command('npm', ['--version']);
-const files = git('ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', 'public', 'package-lock.json', 'package.json').split('\0').filter(Boolean);
-const hashes = Object.fromEntries(await Promise.all(files.map(async file => [file, sha(await readFile(resolve(root, file)))])));
+const snapshot = await captureSource(root), hashes = snapshot.hashes;
 hashes['benchmark-script'] = sha(await readFile(driver));
+const driverCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: moduleRoot, encoding: 'utf8' }).trim();
+const driverPackageLockSha256 = root === moduleRoot ? hashes['package-lock.json'] : sha(await readFile(resolve(moduleRoot, 'package-lock.json')));
 const redact = message => [driver, output, root, os.homedir()].reduce((value, path) => value.replaceAll(pathToFileURL(path).href, '[path]').replaceAll(path, '[path]').replaceAll(path.replaceAll('\\', '/'), '[path]'), String(message));
 const report = {
   metadata: {
     commit: git('rev-parse', 'HEAD'), gitStatus: git('status', '--porcelain=v1'), hashes,
     date: new Date().toISOString(), node: process.version, npm,
-    playwright: JSON.parse(await readFile(require.resolve('playwright/package.json'), 'utf8')).version,
+    driverCommit, driverPackageLockSha256,
+    playwright: JSON.parse(playwrightPackage).version, playwrightPackageJsonSha256: sha(playwrightPackage),
     chromiumBinarySha256: sha(await readFile(chromium.executablePath())),
     os: `${os.type()} ${os.release()} ${os.arch()}`, cpu: os.cpus()[0]?.model,
     logicalProcessors: os.cpus().length, ramBytes: os.totalmem(),
@@ -79,21 +103,12 @@ const report = {
     battery: command('powershell.exe', ['-NoProfile', '-Command', 'Get-CimInstance Win32_Battery | Select-Object BatteryStatus,EstimatedChargeRemaining | ConvertTo-Json -Compress']),
     warmup, count, rounds,
     units: 'milliseconds, performance.now; error samples retained',
-    method: 'Playwright bundled full Chromium in a fresh ephemeral browser context; localhost HTTP owned by this process; all other HTTP requests aborted. Synthetic input and hashchange events exercise actual app handlers, input-to-frame ends at the next animation frame before paint. Native storage uses a real isolated-origin localStorage; library microbench uses a fake initial read and writer access, not the Web Locks app policy. UI uses real Web Locks. Warmups precede every stage.',
+    method: 'Playwright bundled full Chromium in a fresh ephemeral browser context; localhost HTTP serves the captured public source bytes and ignores later disk changes; all other HTTP requests aborted. Synthetic input and hashchange events exercise actual app handlers, input-to-frame ends at the next animation frame before paint. Native storage uses a real isolated-origin localStorage; library microbench uses a fake initial read and writer access, not the Web Locks app policy. UI uses real Web Locks. Warmups precede every stage.',
     cases: '0, 1, or 100 macros; every macro has 500 key events and maximum valid names/inputs; escaped case uses lone U+D800 code units.',
     limits: 'No hardware, companion, browser default profile, or production storage.'
   }, results: [], errors: [], blockedOrigins: {}
 };
-const server = createServer(async (request, response) => {
-  const pathname = new URL(request.url, 'http://localhost').pathname;
-  if (pathname === '/bench') { response.writeHead(200, { 'Content-Type': 'text/html' }).end('<!doctype html><title>Isolated macro benchmark</title>'); return; }
-  const file = resolve(publicRoot, `.${pathname === '/' ? '/index.html' : pathname}`);
-  if (!file.startsWith(publicRoot + sep)) { response.writeHead(403).end(); return; }
-  try {
-    const data = await readFile(file);
-    response.writeHead(200, { 'Content-Type': { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.svg': 'image/svg+xml' }[extname(file)] || 'application/octet-stream' }).end(data);
-  } catch { response.writeHead(404).end(); }
-});
+const server = createBenchmarkServer(snapshot);
 await new Promise(resolveListen => server.listen(0, '127.0.0.1', resolveListen));
 assert.notEqual(server.address().port, 17321);
 const base = `http://127.0.0.1:${server.address().port}`;
