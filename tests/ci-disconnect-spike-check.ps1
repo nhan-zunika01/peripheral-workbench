@@ -397,7 +397,7 @@ $manifest.script = $script:spikeSource; $manifest.pwsh = 'C:\sealed\pwsh.exe'; $
 $State = 'C:\sealed\manifest.json'; $Mode = 'Watchdog'
 function Get-SpikeSid { 'S-1-5-18' }
 function Assert-SpikeSealed($Path, $ControllerSid) { $script:sealedChecks.Add($Path) }
-function Get-ChildItem { param($Path) if ($script:rejectAck) { [pscustomobject]@{ Name = 'GITHUB_TEST_SECRET'; Value = 'secret-value-sentinel' }; [pscustomobject]@{ Name = 'UNRELATED'; Value = 'other-secret-value-sentinel' } } }
+function Get-ChildItem { param($Path) if ($script:overrideEnv) { $script:environmentRows } elseif ($script:rejectAck) { [pscustomobject]@{ Name = 'GITHUB_TEST_SECRET'; Value = 'secret-value-sentinel' }; [pscustomobject]@{ Name = 'UNRELATED'; Value = 'other-secret-value-sentinel' } } }
 function Get-CimInstance {
   param($ClassName,$Filter)
   $parent = if ($Filter -eq "ProcessId=$PID" -and $script:rejectAck) { if ($script:mainAncestor) { $script:fakeMain } elseif ($script:supervisorAncestor) { $script:fakeSupervisor } else { 0 } } elseif ($Filter -eq "ProcessId=$script:fakeMain" -and $script:supervisorAncestor) { $script:fakeSupervisor } else { 0 }
@@ -450,5 +450,22 @@ foreach ($case in @(@('missing',''),@('pid','pid'),@('sid','sid'),@('tracking','
   if ($badAck) { $badAck[$case[1]] = $null }
   $diagnostic = $null; try { Assert-SpikeAck $badAck $manifest } catch { $diagnostic = $_.Exception.Message }
   if ($diagnostic -cne "Missing or invalid independent SYSTEM watchdog acknowledgement: $($case[0])") { throw "Incorrect ACK failure label: $($case[0])" }
+}
+$cacheVariable = [pscustomobject]@{ Name = 'ACTIONS_RUNNER_ACTION_ARCHIVE_CACHE' }
+$script:cacheValueReads = 0
+$cacheVariable | Add-Member -MemberType ScriptProperty -Name Value -Value { $script:cacheValueReads++; 'cache-value-sentinel' }
+$null = $cacheVariable.Value; if ($script:cacheValueReads -ne 1) { throw 'Cache value read sentinel is not working' }; $script:cacheValueReads = 0
+$script:overrideEnv = $true; $script:environmentRows = @($cacheVariable); $script:saved = @{}; $script:ackFailure = $null
+$cacheError = $null; try { Invoke-Expression $dispatch } catch { $cacheError = $_.Exception.Message }
+if (!$script:saved.ContainsKey('C:\sealed\armed.json')) { throw "Cache-only watchdog did not arm: $cacheError" }
+if (!$script:saved['C:\sealed\ack.json'].trackingAbsent -or $script:saved.ContainsKey('C:\sealed\watchdog-error.json')) { throw 'Cache-only watchdog published an invalid ACK' }
+if ($script:cacheValueReads -ne 0 -or ($script:saved | ConvertTo-Json -Depth 16).Contains('cache-value-sentinel')) { throw 'Watchdog read or published the cache value' }
+foreach ($name in @('RUNNER_TRACKING_ID','GITHUB_TOKEN','ACTIONS_RUNTIME_TOKEN','ACTIONS_UNKNOWN_MARKER','ACTIONS_RUNNER_ACTION_ARCHIVE_CACHE_SUFFIX','actions_runner_action_archive_cache')) {
+  $script:environmentRows = @($cacheVariable,[pscustomobject]@{ Name = $name; Value = 'tracking-value-sentinel' }); $script:saved = @{}; $script:ackFailure = $null
+  try { Invoke-Expression $dispatch } catch { }
+  $blocked = $script:saved['C:\sealed\watchdog-error.json']
+  if ($script:saved.Count -ne 1 -or $blocked.error -cne 'Missing or invalid independent SYSTEM watchdog acknowledgement: tracking' -or @($blocked.ackFailure.trackingNames).Count -ne 1 -or $blocked.ackFailure.trackingNames[0] -cne $name) { throw "Tracking marker was accepted or misreported: $name" }
+  $blockedJson = $blocked | ConvertTo-Json -Depth 16; $publicBlocked = Protect-SpikeEvidence $blockedJson $manifest $manifest.root
+  if ($script:cacheValueReads -ne 0 -or $blockedJson.Contains('tracking-value-sentinel') -or $publicBlocked.Contains('tracking-value-sentinel') -or $blockedJson.Contains('cache-value-sentinel') -or $publicBlocked.Contains('cache-value-sentinel')) { throw 'Environment value was read or escaped diagnostics' }
 }
 Write-Output 'PASS hosted spike guards, recovery fences, deadline independence and immutable-path ACL checks (platform operations mocked)'

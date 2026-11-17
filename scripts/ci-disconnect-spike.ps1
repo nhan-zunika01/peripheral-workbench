@@ -301,7 +301,7 @@ function Invoke-SpikeWatchdog($Manifest) {
   Assert-SpikeManifest $Manifest
   foreach ($path in @($Manifest.root,$script:spikeSource,$State,$Manifest.pwsh,$Manifest.node)) { Assert-SpikeSealed $path $Manifest.controllerSid }
   if ($script:spikeSource -cne $Manifest.script -or (Get-FileHash $script:spikeSource).Hash.ToLowerInvariant() -cne $Manifest.scriptHash) { throw 'Recovery script identity mismatch' }
-  $trackingNames = @(Get-ChildItem Env: | Where-Object Name -match '^(GITHUB_|ACTIONS_|RUNNER_TRACKING_ID$)' | Select-Object -ExpandProperty Name); $trackingAbsent = !$trackingNames.Count
+  $trackingNames = @(Get-ChildItem Env: | Where-Object { $_.Name -match '^(GITHUB_|ACTIONS_|RUNNER_TRACKING_ID$)' -and $_.Name -cne 'ACTIONS_RUNNER_ACTION_ARCHIVE_CACHE' } | Select-Object -ExpandProperty Name); $trackingAbsent = !$trackingNames.Count # The runner action archive cache is not a tracking marker.
   $ancestors = @(); $ancestor = $PID
   while ($ancestor -gt 0) { $row = Get-CimInstance Win32_Process -Filter "ProcessId=$ancestor"; if (!$row) { break }; $ancestors += $ancestor; $ancestor = $row.ParentProcessId; if ($ancestor -in $ancestors) { throw 'Cyclic process ancestry' } }
   $supervisor = Read-SpikeJson "$($Manifest.root)\supervisor.json"
