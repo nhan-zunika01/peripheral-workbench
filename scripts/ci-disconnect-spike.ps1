@@ -53,9 +53,15 @@ function Assert-SpikeProbe($Probe, [bool]$Connected) {
   if ($Probe.connected -isnot [bool] -or $Probe.connected -ne $Connected -or $Probe.loopback -ne $true) { throw 'Probe did not establish the required external/loopback state' }
 }
 function Get-SpikeInventory {
-  $adapters = @(Get-NetAdapter -IncludeHidden | ForEach-Object {
-    @{ guid = $_.InterfaceGuid.ToString(); device = $_.PnPDeviceID; index = $_.ifIndex; admin = $_.AdminStatus.ToString(); status = $_.Status.ToString()
-      bindings = @(Get-NetAdapterBinding -Name $_.Name -AllBindings | Select-Object ComponentID,Enabled) }
+  $adapterObjects = @(Get-NetAdapter -IncludeHidden)
+  $bindingObjects = @(Get-NetAdapterBinding -Name '*' -IncludeHidden -AllBindings -ErrorAction Stop)
+  foreach ($binding in $bindingObjects) {
+    if (@($adapterObjects | Where-Object { $_.Name -eq $binding.Name -and $_.InterfaceDescription -eq $binding.InterfaceDescription }).Count -ne 1) { throw 'Binding identity does not match exactly one inventoried adapter' }
+  }
+  $adapters = @($adapterObjects | ForEach-Object {
+    $adapter = $_
+    @{ guid = $adapter.InterfaceGuid.ToString(); device = $adapter.PnPDeviceID; index = $adapter.ifIndex; admin = $adapter.AdminStatus.ToString(); status = $adapter.Status.ToString()
+      bindings = @($bindingObjects | Where-Object { $_.Name -eq $adapter.Name -and $_.InterfaceDescription -eq $adapter.InterfaceDescription } | Select-Object ComponentID,Enabled) }
   })
   $interfaces = @(Get-NetIPInterface | Select-Object InterfaceIndex,InterfaceAlias,AddressFamily,ConnectionState)
   $routes = @(Get-NetRoute | Select-Object InterfaceIndex,AddressFamily,DestinationPrefix,NextHop)
@@ -183,7 +189,7 @@ function Wait-SpikeFile([string]$Path, [int]$Seconds = 30) {
 }
 function Start-SpikeMode($Manifest, [string]$ChildMode, [pscredential]$Credential, [string]$ChildStage = 'before') {
   $options = @{ FilePath = $Manifest.pwsh; ArgumentList = @('-NoProfile','-File',"`"$($Manifest.script)`"",'-Mode',$ChildMode,'-State',"`"$($Manifest.root)\manifest.json`"",'-Stage',$ChildStage); WorkingDirectory = $Manifest.root; WindowStyle = 'Hidden'; PassThru = $true }
-  $logRoot = if ($Credential) { $Manifest.childRoot } else { $Manifest.root }
+  $logRoot = $Manifest.root
   $options.RedirectStandardOutput = "$logRoot\$ChildMode-$ChildStage.log"; $options.RedirectStandardError = "$logRoot\$ChildMode-$ChildStage.stderr"
   if ($Credential) {
     $clean = @{}; foreach ($item in Get-ChildItem Env:) { $clean[$item.Name] = $null }
@@ -384,7 +390,7 @@ function Invoke-SpikeRun {
     } catch { $proof.cleanupError = $_.Exception.Message; $proof.pass = $false }
     Save-SpikeJson $proof (Join-Path $Output 'proof.json')
     foreach ($name in @('ack.json','arm.json','release.json','recovery-fence.json','recovery.json','timeline.json','death.json','watchdog-error.json')) { if (Test-Path "$root\$name") { Copy-Item -LiteralPath "$root\$name" -Destination $Output } }
-    foreach ($log in @(Get-ChildItem -LiteralPath $root -File -Filter '*.stderr') + @(Get-ChildItem -LiteralPath "$root\child" -File -Filter '*.stderr' -ErrorAction SilentlyContinue)) { Copy-Item -LiteralPath $log.FullName -Destination $Output }
+    foreach ($log in Get-ChildItem -LiteralPath $root -File -Filter '*.stderr') { Copy-Item -LiteralPath $log.FullName -Destination $Output }
     if ($manifest) {
       foreach ($file in Get-ChildItem -LiteralPath $Output -File) {
         $text = [string](Get-Content -LiteralPath $file.FullName -Raw)

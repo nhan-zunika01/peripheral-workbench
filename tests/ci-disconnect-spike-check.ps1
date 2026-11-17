@@ -12,6 +12,48 @@ function Assert-Throws([scriptblock]$Action, [string]$Name) {
   try { & $Action } catch { $failed = $true }
   if (!$failed) { throw "Accepted unsafe scenario: $Name" }
 }
+$script:bindingFailure = ''; $script:bindingQueries = 0
+function Get-NetAdapter {
+  param([switch]$IncludeHidden)
+  foreach ($row in @(@('Ethernet','Hosted Ethernet',4), @('Ethernet (Kernel Debugger)','Kernel Debugger',5), @('Hidden Without Bindings','Empty Binding Adapter',6))) {
+    if ($IncludeHidden -or $row[2] -eq 4) { [pscustomobject]@{ Name = $row[0]; InterfaceDescription = $row[1]; InterfaceGuid = [guid]("00000000-0000-0000-0000-00000000000" + ($row[2] - 3)); PnPDeviceID = "device-$($row[2])"; ifIndex = $row[2]; AdminStatus = 'Up'; Status = 'Disconnected' } }
+  }
+}
+function Get-NetAdapterBinding {
+  param($Name,[switch]$IncludeHidden,[switch]$AllBindings,$ErrorAction)
+  $script:bindingQueries++
+  if ($script:bindingFailure -eq 'provider') { throw 'Simulated binding provider failure' }
+  if ($Name -and $Name -ne 'Ethernet' -and !$IncludeHidden) { throw "No MSFT_NetAdapterBindingSettingData found for hidden adapter '$Name'" }
+  $rows = @([pscustomobject]@{ Name = 'Ethernet'; InterfaceDescription = 'Hosted Ethernet'; ComponentID = 'ms_tcpip'; Enabled = $true })
+  if ($IncludeHidden) { $rows += [pscustomobject]@{ Name = 'Ethernet (Kernel Debugger)'; InterfaceDescription = 'Kernel Debugger'; ComponentID = 'ms_tcpip6'; Enabled = $true } }
+  if ($script:bindingFailure -eq 'unaccounted') { $rows += [pscustomobject]@{ Name = 'Unexpected Tunnel'; InterfaceDescription = 'Unknown'; ComponentID = 'ms_tcpip'; Enabled = $true } }
+  $rows | Where-Object { !$Name -or $_.Name -like $Name }
+}
+function Get-NetIPInterface { foreach ($index in @(1,4,5,6)) { [pscustomobject]@{ InterfaceIndex = $index } } }
+function Get-NetRoute { [pscustomobject]@{ InterfaceIndex = 4 } }
+function Get-NetIPAddress { param($InterfaceIndex) foreach ($address in @('127.0.0.1','::1')) { [pscustomobject]@{ IPAddress = $address } } }
+$hiddenInventory = Get-SpikeInventory
+if ($hiddenInventory.adapters.Count -ne 3 -or $hiddenInventory.adapters[1].bindings[0].ComponentID -ne 'ms_tcpip6' -or $hiddenInventory.adapters[2].bindings.Count -ne 0 -or $hiddenInventory.adapters[2].admin -ne 'Up' -or $script:bindingQueries -ne 1) { throw 'Hidden adapter bindings or exact empty binding evidence was lost' }
+$script:bindingFailure = 'provider'
+Assert-Throws { Get-SpikeInventory } 'binding provider failure cannot become empty binding evidence'
+$script:bindingFailure = 'unaccounted'
+Assert-Throws { Get-SpikeInventory } 'binding for an unaccounted external interface'
+Remove-Item Function:\Get-NetAdapter,Function:\Get-NetAdapterBinding,Function:\Get-NetIPInterface,Function:\Get-NetRoute,Function:\Get-NetIPAddress
+function Start-Process {
+  param($FilePath,$ArgumentList,$WorkingDirectory,$WindowStyle,[switch]$PassThru,$RedirectStandardOutput,$RedirectStandardError,$Credential,[switch]$LoadUserProfile,$Environment)
+  $script:launch = $PSBoundParameters
+}
+$launchManifest = @{ root = 'C:\Program Files\T00-sealed'; childRoot = 'C:\Program Files\T00-sealed\child'; pwsh = 'C:\Program Files\T00-sealed\powershell\pwsh.exe'; node = 'C:\Program Files\T00-sealed\node.exe'; script = 'C:\Program Files\T00-sealed\controller.ps1' }
+$mockCredential = [pscredential]::new('mock-only-user', [Security.SecureString]::new())
+foreach ($launchStage in @('before','during','after')) {
+  $null = Start-SpikeMode $launchManifest 'Child' $mockCredential $launchStage
+  if ($script:launch.RedirectStandardOutput -cne "$($launchManifest.root)\Child-$launchStage.log" -or $script:launch.RedirectStandardError -cne "$($launchManifest.root)\Child-$launchStage.stderr") { throw 'Elevated standard-user launch opened a child-controlled redirection path' }
+}
+foreach ($launchMode in @('Supervisor','Monitor')) {
+  $null = Start-SpikeMode $launchManifest $launchMode $null
+  if ($script:launch.RedirectStandardOutput -cne "$($launchManifest.root)\$launchMode-before.log" -or $script:launch.RedirectStandardError -cne "$($launchManifest.root)\$launchMode-before.stderr") { throw 'Elevated controller launch used a writable redirection path' }
+}
+Remove-Item Function:\Start-Process
 function Get-SpikePlatform { @{ windows = $true; admin = $true; actions = 'true'; runner = 'github-hosted'; workflow = 'T00 disconnect feasibility'; job = 'spike'; temp = 'C:\runner\temp'; branch = 'refs/heads/codex/t00-offline-spike' } }
 Assert-SpikeHost (Get-SpikePlatform)
 foreach ($field in @('windows','admin','actions','runner','workflow','job','temp','branch')) {
