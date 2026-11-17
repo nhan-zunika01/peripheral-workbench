@@ -390,4 +390,65 @@ $script:copies.Clear()
 Assert-Throws { & $installImplementation 'C:\Program Files\T00-sealed' 'C:\mutable-runtime\pwsh.exe' 'D:\mutable-cache\node.exe' } 'replaceable parent bootstrap runtime'
 if ($script:copies.Count) { throw 'Tool copying started before bootstrap trust validation' }
 Remove-Item Function:\Get-Item,Function:\Get-ChildItem,Function:\New-Item,Function:\Copy-Item,Function:\Get-FileHash
+$script:rejectAck = $true; $script:mainAncestor = $true; $script:supervisorAncestor = $true; $script:sealedChecks = [Collections.Generic.List[string]]::new()
+$script:fakeMain = $PID + 100000; $script:fakeSupervisor = $PID + 200000; $script:fakeChild = $PID + 300000
+$manifest.mainPid = $script:fakeMain; $manifest.root = 'C:\sealed'; $manifest.controllerSid = 'S-1-5-21-500'
+$manifest.script = $script:spikeSource; $manifest.pwsh = 'C:\sealed\pwsh.exe'; $manifest.node = 'C:\sealed\node.exe'
+$State = 'C:\sealed\manifest.json'; $Mode = 'Watchdog'
+function Get-SpikeSid { 'S-1-5-18' }
+function Assert-SpikeSealed($Path, $ControllerSid) { $script:sealedChecks.Add($Path) }
+function Get-ChildItem { param($Path) if ($script:rejectAck) { [pscustomobject]@{ Name = 'GITHUB_TEST_SECRET'; Value = 'secret-value-sentinel' }; [pscustomobject]@{ Name = 'UNRELATED'; Value = 'other-secret-value-sentinel' } } }
+function Get-CimInstance {
+  param($ClassName,$Filter)
+  $parent = if ($Filter -eq "ProcessId=$PID" -and $script:rejectAck) { if ($script:mainAncestor) { $script:fakeMain } elseif ($script:supervisorAncestor) { $script:fakeSupervisor } else { 0 } } elseif ($Filter -eq "ProcessId=$script:fakeMain" -and $script:supervisorAncestor) { $script:fakeSupervisor } else { 0 }
+  [pscustomobject]@{ ParentProcessId = $parent }
+}
+function Get-FileHash { param($Path) @{ Hash = ('a' * 64) } }
+function Read-SpikeJson([string]$Path) { @{ id = $(if ($Path -like '*supervisor.json') { $script:fakeSupervisor } else { $script:fakeChild }); start = 123 } }
+function Get-Process { param($Id,$ErrorAction) [pscustomobject]@{ StartTime = [DateTime]::new(123, [DateTimeKind]::Utc); Handle = 42 } }
+function Get-NetAdapter { param([switch]$IncludeHidden) [pscustomobject]@{ mock = $true } }
+function Get-SpikeAdapterMatches($Adapter,$Objects) { [pscustomobject]@{ mock = $true } }
+function Get-SpikeInventory { @{ adapters = $(if ($script:rejectAck) { @($manifest.adapters[0],$manifest.adapters[1]) } else { @($manifest.adapters) }) } }
+function Wait-SpikeFile { param($Path,$Seconds) @{ tick = 100; deadline = 100 + 15 * [Diagnostics.Stopwatch]::Frequency; child = @{ id = $script:fakeChild; start = 123 }; supervisor = @{ id = $script:fakeSupervisor; start = 123 } } }
+function Invoke-SpikeRecovery { param($Manifest,$Arm,$Path) @{ pass = $true } }
+$parseTokens = $null; $parseErrors = $null
+$sourceAst = [Management.Automation.Language.Parser]::ParseFile($source, [ref]$parseTokens, [ref]$parseErrors)
+if ($parseErrors.Count) { throw 'Unable to parse watchdog dispatch' }
+$dispatch = $sourceAst.EndBlock.Statements[-1].Extent.Text
+$script:saved = @{}
+try { Invoke-Expression $dispatch } catch { $watchdogError = $_.Exception.Message }
+$failure = $script:saved['C:\sealed\watchdog-error.json']
+if (!$failure.ackFailure) { throw "Watchdog ACK failure diagnostics are missing: $watchdogError" }
+if ($watchdogError -cne 'Missing or invalid independent SYSTEM watchdog acknowledgement: tracking,ancestry,snapshot' -or $failure.error -cne $watchdogError) { throw 'Watchdog did not retain each rejected ACK predicate' }
+if ($script:saved.Count -ne 1 -or $script:sealedChecks[-1] -cne $manifest.root) { throw 'Rejected ACK was published or the watchdog failure path was not sealed' }
+$detail = $failure.ackFailure
+if (@($detail.trackingNames).Count -ne 1 -or $detail.trackingNames[0] -cne 'GITHUB_TEST_SECRET' -or !$detail.mainInAncestors -or !$detail.supervisorInAncestors) { throw 'ACK failure lost tracking names or ancestor membership' }
+if ($detail.expectedAdapterCount -ne 3 -or $detail.actualAdapterCount -ne 2) { throw 'ACK failure lost adapter counts' }
+$expectedKey = Get-SpikeAdapterKey $manifest.adapters; $actualKey = Get-SpikeAdapterKey @($manifest.adapters[0],$manifest.adapters[1])
+$expectedHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($expectedKey))).ToLowerInvariant()
+$actualHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($actualKey))).ToLowerInvariant()
+if ($detail.expectedKeyHash -cne $expectedHash -or $detail.actualKeyHash -cne $actualHash -or $expectedHash -ceq $actualHash) { throw 'ACK failure did not hash both canonical keys' }
+$failureJson = $failure | ConvertTo-Json -Depth 16
+$publicFailureJson = Protect-SpikeEvidence $failureJson $manifest $manifest.root
+if ($failureJson.Contains('secret-value-sentinel') -or $failureJson.Contains($expectedKey) -or $failureJson.Contains($actualKey) -or $publicFailureJson.Contains('secret-value-sentinel') -or $publicFailureJson.Contains($expectedKey) -or $publicFailureJson.Contains($actualKey)) { throw 'ACK diagnostics exposed a value or canonical key' }
+$publicDetail = ($publicFailureJson | ConvertFrom-Json -AsHashtable).ackFailure
+if ($publicDetail.expectedKeyHash -cne $expectedHash -or $publicDetail.actualKeyHash -cne $actualHash) { throw 'Evidence redaction changed the canonical key hashes' }
+foreach ($role in @('main','supervisor')) {
+  $script:mainAncestor = $role -eq 'main'; $script:supervisorAncestor = $role -eq 'supervisor'; $script:saved = @{}; $script:ackFailure = $null
+  try { Invoke-Expression $dispatch } catch { }
+  $roleDetail = $script:saved['C:\sealed\watchdog-error.json'].ackFailure
+  if ($roleDetail.mainInAncestors -ne $script:mainAncestor -or $roleDetail.supervisorInAncestors -ne $script:supervisorAncestor) { throw "ACK diagnostics confused the $role ancestor" }
+}
+$script:rejectAck = $false; $script:saved = @{}; $script:ackFailure = $null
+Invoke-Expression $dispatch
+$validAck = $script:saved['C:\sealed\ack.json']
+if (!$validAck -or $script:saved.ContainsKey('C:\sealed\watchdog-error.json') -or !$script:saved.ContainsKey('C:\sealed\armed.json')) { throw 'Valid watchdog ACK path did not reach armed state' }
+Assert-SpikeAck $validAck $manifest
+if (@($validAck.Keys).Count -ne 6 -or !$validAck.trackingAbsent -or !$validAck.independent -or $validAck.snapshot -cne $expectedKey) { throw 'Valid ACK fields or snapshot changed' }
+foreach ($case in @(@('missing',''),@('pid','pid'),@('sid','sid'),@('tracking','trackingAbsent'),@('ancestry','independent'),@('snapshot','snapshot'))) {
+  $badAck = if ($case[0] -eq 'missing') { $null } else { $ack.Clone() }
+  if ($badAck) { $badAck[$case[1]] = $null }
+  $diagnostic = $null; try { Assert-SpikeAck $badAck $manifest } catch { $diagnostic = $_.Exception.Message }
+  if ($diagnostic -cne "Missing or invalid independent SYSTEM watchdog acknowledgement: $($case[0])") { throw "Incorrect ACK failure label: $($case[0])" }
+}
 Write-Output 'PASS hosted spike guards, recovery fences, deadline independence and immutable-path ACL checks (platform operations mocked)'

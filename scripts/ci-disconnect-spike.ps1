@@ -87,7 +87,8 @@ function Assert-SpikeArm($Arm, $Manifest) {
   if (!$Arm -or $Arm.tick -le 0 -or $Arm.deadline -ne ($Arm.tick + $Manifest.seconds * [Diagnostics.Stopwatch]::Frequency) -or $Arm.child.id -le 0 -or $Arm.child.start -le 0 -or $Arm.supervisor.id -le 0 -or $Arm.supervisor.start -le 0) { throw 'Malformed monotonic arm or process identity' }
 }
 function Assert-SpikeAck($Ack, $Manifest) {
-  if (!$Ack -or $Ack.pid -le 0 -or $Ack.sid -cne 'S-1-5-18' -or $Ack.trackingAbsent -ne $true -or $Ack.independent -ne $true -or $Ack.snapshot -cne (Get-SpikeAdapterKey $Manifest.adapters)) { throw 'Missing or invalid independent SYSTEM watchdog acknowledgement' }
+  $failed = @(if (!$Ack) { 'missing' } else { if ($Ack.pid -le 0) { 'pid' }; if ($Ack.sid -cne 'S-1-5-18') { 'sid' }; if ($Ack.trackingAbsent -ne $true) { 'tracking' }; if ($Ack.independent -ne $true) { 'ancestry' }; if ($Ack.snapshot -cne (Get-SpikeAdapterKey $Manifest.adapters)) { 'snapshot' } })
+  if ($failed.Count) { throw "Missing or invalid independent SYSTEM watchdog acknowledgement: $($failed -join ',')" }
 }
 function Assert-SpikeProbe($Probe, [bool]$Connected) {
   if ($Probe.connected -isnot [bool] -or $Probe.connected -ne $Connected -or $Probe.loopback -ne $true) { throw 'Probe did not establish the required external/loopback state' }
@@ -300,7 +301,7 @@ function Invoke-SpikeWatchdog($Manifest) {
   Assert-SpikeManifest $Manifest
   foreach ($path in @($Manifest.root,$script:spikeSource,$State,$Manifest.pwsh,$Manifest.node)) { Assert-SpikeSealed $path $Manifest.controllerSid }
   if ($script:spikeSource -cne $Manifest.script -or (Get-FileHash $script:spikeSource).Hash.ToLowerInvariant() -cne $Manifest.scriptHash) { throw 'Recovery script identity mismatch' }
-  $trackingAbsent = !@(Get-ChildItem Env: | Where-Object Name -match '^(GITHUB_|ACTIONS_|RUNNER_TRACKING_ID$)').Count
+  $trackingNames = @(Get-ChildItem Env: | Where-Object Name -match '^(GITHUB_|ACTIONS_|RUNNER_TRACKING_ID$)' | Select-Object -ExpandProperty Name); $trackingAbsent = !$trackingNames.Count
   $ancestors = @(); $ancestor = $PID
   while ($ancestor -gt 0) { $row = Get-CimInstance Win32_Process -Filter "ProcessId=$ancestor"; if (!$row) { break }; $ancestors += $ancestor; $ancestor = $row.ParentProcessId; if ($ancestor -in $ancestors) { throw 'Cyclic process ancestry' } }
   $supervisor = Read-SpikeJson "$($Manifest.root)\supervisor.json"
@@ -316,8 +317,10 @@ function Invoke-SpikeWatchdog($Manifest) {
     if ($matches.Count -ne 1) { throw 'Pre-arm adapter identity mismatch' }
     $script:spikeAdapterHandles[$adapter.guid] = $matches[0]
   }
-  $ack = @{ pid = $PID; sid = 'S-1-5-18'; trackingAbsent = $trackingAbsent; independent = ($Manifest.mainPid -notin $ancestors -and $supervisor.id -notin $ancestors); ancestors = $ancestors; snapshot = (Get-SpikeAdapterKey (Get-SpikeInventory).adapters) }
-  Assert-SpikeAck $ack $Manifest
+  $snapshotAdapters = (Get-SpikeInventory).adapters; $ack = @{ pid = $PID; sid = 'S-1-5-18'; trackingAbsent = $trackingAbsent; independent = ($Manifest.mainPid -notin $ancestors -and $supervisor.id -notin $ancestors); ancestors = $ancestors; snapshot = (Get-SpikeAdapterKey $snapshotAdapters) }
+  try { Assert-SpikeAck $ack $Manifest } catch {
+    $keyHashes = @((Get-SpikeAdapterKey $Manifest.adapters),$ack.snapshot) | ForEach-Object { [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes([string]$_))).ToLowerInvariant() }
+    $script:ackFailure = @{ trackingNames = $trackingNames; mainInAncestors = $Manifest.mainPid -in $ancestors; supervisorInAncestors = $supervisor.id -in $ancestors; expectedAdapterCount = @($Manifest.adapters).Count; actualAdapterCount = @($snapshotAdapters).Count; expectedKeyHash = $keyHashes[0]; actualKeyHash = $keyHashes[1] }; throw }
   Save-SpikeJson $ack "$($Manifest.root)\ack.json"
   $arm = Wait-SpikeFile "$($Manifest.root)\arm.json" 60
   Assert-SpikeArm $arm $Manifest
@@ -490,7 +493,7 @@ try {
 } catch {
   if ($Mode -eq 'Watchdog' -and (Get-SpikeSid) -ceq 'S-1-5-18') {
     Assert-SpikeSealed $manifest.root $manifest.controllerSid
-    Save-SpikeJson @{ error = $_.Exception.Message; utc = [DateTime]::UtcNow.ToString('o') } "$($manifest.root)\watchdog-error.json"
+    $failure = @{ error = $_.Exception.Message; utc = [DateTime]::UtcNow.ToString('o') }; if ($script:ackFailure) { $failure.ackFailure = $script:ackFailure }; Save-SpikeJson $failure "$($manifest.root)\watchdog-error.json"
   }
   throw
 }
