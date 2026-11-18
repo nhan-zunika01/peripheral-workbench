@@ -373,16 +373,28 @@ if (!$script:toolChecked -or $script:accountAttempts -ne 0 -or $setupError -notm
 Remove-Item Function:\Test-Path,Function:\New-Item,Function:\Get-ChildItem,Function:\New-LocalUser
 Remove-Item Function:\Get-Item,Function:\Get-Acl
 $script:sealedPaths = [Collections.Generic.List[string]]::new(); $script:copies = [Collections.Generic.List[string]]::new(); $script:copyMismatch = $false
+$script:runtimeFixture = @('pwsh.exe','engine.dll','Modules\fixture.psm1')
 function Assert-SpikeSealed([string]$Path) { $script:sealedPaths.Add($Path); if ($Path -like 'C:\mutable-runtime*') { throw 'Mutable bootstrap runtime rejected' } }
 function Get-Item([string]$LiteralPath) { [pscustomobject]@{ FullName = $LiteralPath; Attributes = [IO.FileAttributes]::Normal; PSIsContainer = $LiteralPath -notmatch '\.exe$' } }
 function Get-ChildItem([string]$LiteralPath, [switch]$Recurse, [switch]$Force) {
-  foreach ($relative in @('pwsh.exe','engine.dll','Modules\fixture.psm1')) { [pscustomobject]@{ FullName = (Join-Path $LiteralPath $relative); PSIsContainer = $false } }
+  foreach ($relative in $script:runtimeFixture) { [pscustomobject]@{ FullName = (Join-Path $LiteralPath $relative); PSIsContainer = $false } }
 }
 function New-Item { param($ItemType,$Path) }
 function Copy-Item { param($LiteralPath,$Destination,[switch]$Recurse,[Parameter(ValueFromPipeline)]$InputObject) process { $script:copies.Add($Destination) } }
-function Get-FileHash([string]$LiteralPath) { @{ Hash = if ($script:copyMismatch -and $LiteralPath -eq 'C:\Program Files\T00-sealed\powershell\engine.dll') { 'b' * 64 } else { 'a' * 64 } } }
+function Get-FileHash([string]$LiteralPath) {
+  $digit = switch ([IO.Path]::GetFileName($LiteralPath)) { 'fixture.psm1' { 'C' } 'engine.dll' { 'B' } default { 'A' } }
+  if ($script:copyMismatch -and $LiteralPath -eq 'C:\Program Files\T00-sealed\powershell\engine.dll') { $digit = 'D' }
+  @{ Hash = $digit * 64 }
+}
 $installed = & $installImplementation 'C:\Program Files\T00-sealed' 'C:\sealed-bootstrap\pwsh.exe' 'D:\mutable-cache\node.exe'
 if ($installed.node -cne 'C:\Program Files\T00-sealed\node.exe' -or $installed.pwsh -cne 'C:\Program Files\T00-sealed\powershell\pwsh.exe' -or $installed.runtimeFiles -ne 3 -or $installed.runtimeHash -notmatch '^[a-f0-9]{64}$') { throw 'Tools escaped the sealed run root or omitted runtime dependencies' }
+$expectedManifest = '{"schema":1,"files":{"Modules/fixture.psm1":"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","engine.dll":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","pwsh.exe":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}'
+$expectedHash = '7ec711547ea816345580875e380472652c1b05a8f7f2320f2c163e59cda8ca1b'
+if (!$installed.runtimeManifest) { throw 'Missing retained PowerShell runtime manifest' }
+if ($installed.runtimeManifest -cne $expectedManifest -or $installed.runtimeHash -cne $expectedHash) { throw 'PowerShell runtime manifest bytes or SHA-256 differ from the canonical fixture' }
+[array]::Reverse($script:runtimeFixture)
+$reordered = & $installImplementation 'C:\Program Files\T00-sealed' 'C:\sealed-bootstrap\pwsh.exe' 'D:\mutable-cache\node.exe'
+if ($reordered.runtimeManifest -cne $expectedManifest -or $reordered.runtimeHash -cne $expectedHash) { throw 'PowerShell runtime manifest depends on file enumeration order' }
 foreach ($target in @('C:\Program Files\T00-sealed\powershell\engine.dll','C:\Program Files\T00-sealed\powershell\Modules\fixture.psm1','C:\Program Files\T00-sealed\node.exe')) { if ($script:sealedPaths -notcontains $target) { throw 'Copied tool dependency ACL was not verified' } }
 $script:copyMismatch = $true
 Assert-Throws { & $installImplementation 'C:\Program Files\T00-sealed' 'C:\sealed-bootstrap\pwsh.exe' 'D:\mutable-cache\node.exe' } 'changed runtime copy bytes'

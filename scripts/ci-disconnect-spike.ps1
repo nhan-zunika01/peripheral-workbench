@@ -222,10 +222,10 @@ function Install-SpikeTools([string]$Root, [string]$Pwsh, [string]$Node) {
   New-Item -ItemType Directory -Path $runtime | Out-Null
   Get-ChildItem -LiteralPath $sourceRoot -Force | Copy-Item -Destination $runtime -Recurse
   $nodeCopy = Join-Path $Root 'node.exe'; Copy-Item -LiteralPath $Node -Destination $nodeCopy
-  $nodeHash = (Get-FileHash -LiteralPath $Node).Hash
-  if ((Get-FileHash -LiteralPath $nodeCopy).Hash -cne $nodeHash) { throw 'Node copy bytes differ from the provisioned source' }
+  if ((Get-FileHash -LiteralPath $Node).Hash -cne (Get-FileHash -LiteralPath $nodeCopy).Hash) { throw 'Node copy bytes differ from the provisioned source' }
   Assert-SpikeSealed $nodeCopy
-  $files = foreach ($item in $sourceItems) {
+  $files = [Collections.Generic.SortedDictionary[string,string]]::new([StringComparer]::Ordinal)
+  foreach ($item in $sourceItems) {
     $relative = [IO.Path]::GetRelativePath($sourceRoot, $item.FullName)
     $destination = [IO.Path]::GetFullPath((Join-Path $runtime $relative))
     if ($destination -ne $runtime -and !$destination.StartsWith("$runtime\", [StringComparison]::OrdinalIgnoreCase)) { throw 'PowerShell copy escaped the immutable runtime' }
@@ -233,11 +233,11 @@ function Install-SpikeTools([string]$Root, [string]$Pwsh, [string]$Node) {
     if (!$item.PSIsContainer) {
       $hash = (Get-FileHash -LiteralPath $item.FullName).Hash
       if ((Get-FileHash -LiteralPath $destination).Hash -cne $hash) { throw 'PowerShell runtime copy bytes differ from the provisioned source' }
-      @{ path = $relative; sha256 = $hash.ToLowerInvariant() }
+      $files.Add($relative.Replace('\', '/'), $hash.ToLowerInvariant())
     }
   }
-  $receipt = @($files | Sort-Object path) | ConvertTo-Json -Compress
-  @{ pwsh = (Join-Path $runtime 'pwsh.exe'); node = $nodeCopy; runtimeFiles = @($files).Count; runtimeHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($receipt))).ToLowerInvariant() }
+  $receipt = [ordered]@{ schema = 1; files = $files } | ConvertTo-Json -Compress
+  @{ pwsh = (Join-Path $runtime 'pwsh.exe'); node = $nodeCopy; runtimeFiles = $files.Count; runtimeManifest = $receipt; runtimeHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($receipt))).ToLowerInvariant() }
 }
 function Wait-SpikeFile([string]$Path, [int]$Seconds = 30) {
   $until = (Get-SpikeTick) + $Seconds * [Diagnostics.Stopwatch]::Frequency
@@ -375,7 +375,7 @@ function Invoke-SpikeRun {
   $proof = @{ scenario = $Scenario; pass = $false; limitation = '15-second guest NIC feasibility only; VM loss means no proof; T00 remains open.' }
   $root = Join-Path ([Environment]::GetFolderPath('ProgramFiles')) ("T00-" + [guid]::NewGuid().ToString('N'))
   $account = 't00' + [guid]::NewGuid().ToString('N').Substring(0,12); $task = "T00-$account"
-  $created = $false; $registered = $false; $manifest = $null; $child = $null; $owned = [Collections.Generic.List[object]]::new()
+  $created = $false; $registered = $false; $manifest = $null; $child = $null; $tools = $null; $owned = [Collections.Generic.List[object]]::new()
   try {
     New-Item -ItemType Directory -Path $root | Out-Null; Set-SpikeAcl $root ''
     Assert-SpikeSealed $root
@@ -402,7 +402,7 @@ function Invoke-SpikeRun {
     Assert-SpikeManifest $manifest; Save-SpikeJson $manifest "$root\manifest.json"
     foreach ($path in @($root,$scriptPath,"$root\manifest.json",$manifest.pwsh,$manifest.node)) { Assert-SpikeSealed $path }
     $proof.sources = @{ controller = $manifest.scriptHash; probe = $manifest.probeHash; commit = (& git rev-parse HEAD) }
-    $proof.tools = @{ runtimeHash = $tools.runtimeHash; runtimeFiles = $tools.runtimeFiles; pwshPath = $manifest.pwsh; nodePath = $manifest.node; pwsh = (Get-FileHash $manifest.pwsh).Hash; node = (Get-FileHash $manifest.node).Hash; powershellVersion = $PSVersionTable.PSVersion.ToString(); nodeVersion = (& $manifest.node --version); image = $env:ImageVersion; frequency = [Diagnostics.Stopwatch]::Frequency }
+    $proof.tools = @{ pwshPath = $manifest.pwsh; nodePath = $manifest.node; pwsh = (Get-FileHash $manifest.pwsh).Hash; node = (Get-FileHash $manifest.node).Hash; powershellVersion = $PSVersionTable.PSVersion.ToString(); nodeVersion = (& $manifest.node --version); image = $env:ImageVersion; frequency = [Diagnostics.Stopwatch]::Frequency }
     $credential = [pscredential]::new("$env:COMPUTERNAME\$account", $secure)
     $baseline = Start-SpikeMode $manifest 'Child' $credential 'before'
     $owned.Add($baseline)
@@ -461,8 +461,9 @@ function Invoke-SpikeRun {
       if ($created) { Remove-LocalUser -Name $account }
     } catch { $proof.cleanupError = $_.Exception.Message; $proof.pass = $false }
     try {
-      $publicProof = Protect-SpikeEvidence ($proof | ConvertTo-Json -Depth 16) $manifest $root
-      Save-SpikeJson ($publicProof | ConvertFrom-Json -AsHashtable) (Join-Path $Output 'proof.json')
+      $publicProof = Protect-SpikeEvidence ($proof | ConvertTo-Json -Depth 16) $manifest $root | ConvertFrom-Json -AsHashtable
+      if ($tools) { $publicProof.tools += @{ runtimeFiles = $tools.runtimeFiles; runtimeManifest = $tools.runtimeManifest; runtimeHash = $tools.runtimeHash } } # Keep the relative-path manifest bytes intact after redaction.
+      Save-SpikeJson $publicProof (Join-Path $Output 'proof.json')
       foreach ($name in @('ack.json','arm.json','release.json','disabler-complete.json','recovery-fence.json','recovery.json','timeline.json','death.json','watchdog-error.json')) {
         if (Test-Path "$root\$name") {
           $publicReceipt = Protect-SpikeEvidence (Get-Content -LiteralPath "$root\$name" -Raw) $manifest $root
