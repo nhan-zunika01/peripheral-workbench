@@ -1,10 +1,10 @@
 name: T00 disconnect feasibility
 
 # A new workflow cannot be manually dispatched before it exists on the default
-# branch. This reviewed throwaway branch is the sole experimental push trigger.
+# branch. Each reviewed experimental branch selects its own scenario.
 on:
   push:
-    branches: [codex/t00-offline-spike]
+    branches: [codex/t00-offline-spike, codex/t00-preflight]
 
 permissions:
   contents: read
@@ -15,13 +15,13 @@ defaults:
 
 jobs:
   spike:
-    name: Experimental disconnect ${{ matrix.scenario }}
+    name: Experimental T00 ${{ matrix.scenario }}
     runs-on: windows-2025
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        scenario: [normal, supervisor-death]
+        scenario: ${{ github.ref == 'refs/heads/codex/t00-preflight' && fromJSON('["connected-preflight"]') || fromJSON('["normal","supervisor-death"]') }}
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
@@ -51,20 +51,20 @@ jobs:
           $destination | Out-File $env:GITHUB_PATH -Append
       - name: Check controller with mocked platform operations
         run: ./tests/ci-disconnect-spike-check.ps1
-      - name: Try fifteen-second guest NIC disconnection
+      - name: Run experimental scenario
         run: |
           if ($PSVersionTable.PSVersion.ToString() -ne '7.5.4') { throw 'Expected pinned PowerShell 7.5.4' }
           ./scripts/ci-disconnect-spike.ps1 -Scenario '${{ matrix.scenario }}' -Output 'test-results/t00-spike'
-      - name: Record runner continuation after recovery
+      - name: Record runner continuation
         if: always()
         run: |
           New-Item -ItemType Directory 'test-results/t00-spike' -Force | Out-Null
           @{ continuedUtc = [DateTime]::UtcNow.ToString('o'); scenario = '${{ matrix.scenario }}'; commit = $env:GITHUB_SHA } | ConvertTo-Json | Set-Content 'test-results/t00-spike/runner-continuation.json'
-      - name: Preserve experimental proof
+      - name: Preserve experimental receipts
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: t00-feasibility-${{ matrix.scenario }}
+          name: ${{ matrix.scenario == 'connected-preflight' && 't00-connected-preparation' || format('t00-feasibility-{0}', matrix.scenario) }}
           path: test-results/t00-spike/
           if-no-files-found: error
           retention-days: 14

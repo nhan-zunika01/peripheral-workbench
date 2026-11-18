@@ -1,7 +1,7 @@
 #requires -Version 7.5
 [CmdletBinding()]
 param([ValidateSet('Run','Supervisor','Watchdog','Monitor','Child')][string]$Mode = 'Run',
-  [ValidateSet('normal','supervisor-death')][string]$Scenario = 'normal', [string]$State,
+  [ValidateSet('normal','supervisor-death','connected-preflight')][string]$Scenario = 'normal', [string]$State,
   [ValidateSet('before','during','after')][string]$Stage = 'before', [string]$Output = 'test-results/t00-spike')
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $false
@@ -27,10 +27,11 @@ function Get-SpikePlatform {
   @{ windows = $IsWindows; admin = ([Security.Principal.WindowsPrincipal]$identity).IsInRole('Administrators'); actions = $env:GITHUB_ACTIONS
     runner = $env:RUNNER_ENVIRONMENT; workflow = $env:GITHUB_WORKFLOW; job = $env:GITHUB_JOB; temp = $env:RUNNER_TEMP; branch = $env:GITHUB_REF }
 }
-function Assert-SpikeHost($Context) {
+function Assert-SpikeHost($Context, [bool]$ConnectedPreparation = $false) {
+  $branch = if ($ConnectedPreparation) { 'refs/heads/codex/t00-preflight' } else { 'refs/heads/codex/t00-offline-spike' }
   if (!$Context.windows -or !$Context.admin -or $Context.actions -cne 'true' -or $Context.runner -cne 'github-hosted' -or
     $Context.workflow -cne 'T00 disconnect feasibility' -or $Context.job -cne 'spike' -or
-    $Context.branch -cne 'refs/heads/codex/t00-offline-spike' -or $Context.temp -notmatch '^[A-Za-z]:\\[^\r\n]+$') { throw 'Restricted to the reviewed experimental GitHub-hosted Windows job' }
+    $Context.branch -cne $branch -or $Context.temp -notmatch '^[A-Za-z]:\\[^\r\n]+$') { throw 'Restricted to the reviewed experimental GitHub-hosted Windows job' }
 }
 function ConvertTo-SpikeAdapter($Adapter) {
   @{ guid = [string]$Adapter.InterfaceGuid; device = $Adapter.PnPDeviceID; index = $Adapter.ifIndex; admin = [string]$Adapter.AdminStatus; status = [string]$Adapter.Status
@@ -74,14 +75,42 @@ function Assert-SpikeAdapters($Adapters) {
     foreach ($field in $seen.Keys) { $seen[$field][[string]$ids[$field]] = $true }; $row++
   }
 }
-function Protect-SpikeEvidence([string]$Text, $Manifest, [string]$Root) {
-  $identities = @($Manifest.adapters | ForEach-Object { $_.guid; $_.device; $_.identityProperties.deviceId; $_.identityProperties.interfaceName; $_.identityProperties.netLuid } | Where-Object { ![string]::IsNullOrWhiteSpace([string]$_) -and [string]$_ -ne '0' } | ForEach-Object { [string]$_ } | Select-Object -Unique | Sort-Object Length -Descending)
+function Protect-SpikeEvidence([string]$Text, $Manifest, [string]$Root, [switch]$PlainText) {
+  $identities = @($Manifest.adapters | ForEach-Object { $_.guid; $_.device; $_.identityProperties.deviceId; $_.identityProperties.interfaceName; $_.identityProperties.netLuid } | Where-Object { ![string]::IsNullOrWhiteSpace([string]$_) -and [string]$_ -ne '0' } | ForEach-Object { [string]$_ } | Select-Object -Unique)
+  $replacements = [Collections.Generic.Dictionary[string,string]]::new()
+  if (![string]::IsNullOrWhiteSpace($Root)) { $replacements[$Root] = '[controller]' }
   foreach ($identity in $identities) {
     $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($identity))).ToLowerInvariant()
-    $Text = $Text.Replace($identity, "sha256:$hash").Replace(($identity | ConvertTo-Json -Compress).Trim('"'), "sha256:$hash")
+    $replacements[$identity] = "sha256:$hash"
   }
-  if (![string]::IsNullOrWhiteSpace($Root)) { $Text = $Text.Replace($Root, '[controller]').Replace(($Root | ConvertTo-Json -Compress).Trim('"'), '[controller]') }
-  $Text
+  if ($PlainText) {
+    foreach ($raw in @($replacements.Keys)) {
+      $quoted = ConvertTo-Json -InputObject $raw -Compress
+      $escaped = $quoted.Substring(1, $quoted.Length - 2)
+      if ($escaped -cne $raw) {
+        $replacements[$escaped] = $replacements[$raw]
+      }
+    }
+  }
+  if (!$replacements.Count) { return $Text }
+  $patterns = foreach ($token in ($replacements.Keys | Sort-Object Length -Descending)) {
+    if ($token -match '^\d+$') { "(?<![\p{L}\p{N}])$token(?![\p{L}\p{N}])" } else { [regex]::Escape($token) }
+  }
+  $matcher = [regex]::new(($patterns -join '|'))
+  function Protect-SpikeValue($Value) {
+    if ($Value -is [string]) {
+      return $matcher.Replace($Value, [Text.RegularExpressions.MatchEvaluator]{ param($match) $replacements[$match.Value] })
+    }
+    if ($Value -is [Collections.IDictionary]) {
+      foreach ($key in @($Value.psbase.Keys)) { $Value[$key] = Protect-SpikeValue $Value[$key] }
+    } elseif ($Value -is [array]) {
+      for ($i = 0; $i -lt $Value.Length; $i++) { $Value[$i] = Protect-SpikeValue $Value[$i] }
+    }
+    return ,$Value
+  }
+  if ($PlainText) { return Protect-SpikeValue $Text }
+  $evidence = ConvertFrom-Json -InputObject $Text -AsHashtable -NoEnumerate -DateKind String
+  ConvertTo-Json -InputObject (Protect-SpikeValue $evidence) -Depth 100 -Compress
 }
 function Assert-SpikeArm($Arm, $Manifest) {
   if (!$Arm -or $Arm.tick -le 0 -or $Arm.deadline -ne ($Arm.tick + $Manifest.seconds * [Diagnostics.Stopwatch]::Frequency) -or $Arm.child.id -le 0 -or $Arm.child.start -le 0 -or $Arm.supervisor.id -le 0 -or $Arm.supervisor.start -le 0) { throw 'Malformed monotonic arm or process identity' }
@@ -294,7 +323,14 @@ function Invoke-SpikeChild($Manifest, [string]$ChildStage) {
   if ($LASTEXITCODE -ne 0 -or $rows.Count -ne 1) { throw 'Finite Node probe failed' }
   $probe = $rows[0] | ConvertFrom-Json -AsHashtable
   Assert-SpikeProbe $probe ($ChildStage -ne 'during')
-  Save-SpikeJson @{ sid = $identity.User.Value; groups = $groups; privileges = $privileges; canaryDenied = $true; outputWritable = $true; profileWritable = $true; start = $start; end = (Get-SpikeTick); probe = $probe } "$($Manifest.childRoot)\$ChildStage.json"
+  $result = @{ sid = $identity.User.Value; groups = $groups; privileges = $privileges; canaryDenied = $true; outputWritable = $true; profileWritable = $true; start = $start; end = (Get-SpikeTick); probe = $probe }
+  if ($Manifest.scenario -eq 'connected-preflight') {
+    $nodeVersion = & $Manifest.node --version
+    if ($LASTEXITCODE -ne 0) { throw 'Node version check failed under the standard token' }
+    $result.pid = $PID
+    $result.versions = @{ powershell = $PSVersionTable.PSVersion.ToString(); node = $nodeVersion }
+  }
+  Save-SpikeJson $result "$($Manifest.childRoot)\$ChildStage.json"
 }
 function Invoke-SpikeWatchdog($Manifest) {
   if ((Get-SpikeSid) -cne 'S-1-5-18') { throw 'Recovery requires SYSTEM' }
@@ -368,11 +404,19 @@ function Invoke-SpikeSupervisor($Manifest) {
   if ($Manifest.scenario -eq 'supervisor-death') { Save-SpikeJson @{ pid = $PID; tick = (Get-SpikeTick); reason = 'deliberate-supervisor-death' } "$($Manifest.root)\death.json"; Stop-Process -Id $PID -Force }
 }
 function Invoke-SpikeRun {
-  Assert-SpikeHost (Get-SpikePlatform)
+  $connectedPreparation = $Scenario -eq 'connected-preflight'
+  Assert-SpikeHost (Get-SpikePlatform) $connectedPreparation
   $Output = [IO.Path]::GetFullPath($Output)
   if (Test-Path -LiteralPath $Output) { throw 'Evidence output must be new' }
   New-Item -ItemType Directory -Path $Output | Out-Null
   $proof = @{ scenario = $Scenario; pass = $false; limitation = '15-second guest NIC feasibility only; VM loss means no proof; T00 remains open.' }
+  $receiptName = 'proof.json'
+  if ($connectedPreparation) {
+    $receiptName = 'connected-preparation.json'
+    $proof.schema = 1
+    $proof.kind = 'connected-preparation'
+    $proof.limitation = 'Connected standard-user PowerShell and Node preparation only. T00 remains open.'
+  }
   $root = Join-Path ([Environment]::GetFolderPath('ProgramFiles')) ("T00-" + [guid]::NewGuid().ToString('N'))
   $account = 't00' + [guid]::NewGuid().ToString('N').Substring(0,12); $task = "T00-$account"
   $created = $false; $registered = $false; $manifest = $null; $child = $null; $tools = $null; $owned = [Collections.Generic.List[object]]::new()
@@ -392,65 +436,85 @@ function Invoke-SpikeRun {
     Set-SpikeAcl $root $sid
     $childRoot = Join-Path $root 'child'; New-Item -ItemType Directory -Path $childRoot | Out-Null; Set-SpikeAcl $childRoot $sid 'Modify'
     $scriptPath = Join-Path $root 'controller.ps1'; Copy-Item -LiteralPath $script:spikeSource -Destination $scriptPath
-    $probe = Join-Path $root 'probe.mjs'; Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'ci-network-probe.mjs') -Destination $probe
+    $probeSource = Join-Path $PSScriptRoot 'ci-network-probe.mjs'
+    $probe = Join-Path $root 'probe.mjs'; Copy-Item -LiteralPath $probeSource -Destination $probe
     'immutable-t00' | Set-Content -LiteralPath "$root\canary"
-    $inventory = Get-SpikeInventory
-    $proof.beforeInventory = $inventory
-    $manifest = @{ schema = 1; seconds = 15; mainPid = $PID; controllerSid = [Security.Principal.WindowsIdentity]::GetCurrent().User.Value; adapters = $inventory.adapters; scenario = $Scenario; root = $root; childRoot = $childRoot; sid = $sid
+    $manifest = @{ schema = 1; mainPid = $PID; controllerSid = (Get-SpikeSid); scenario = $Scenario; root = $root; childRoot = $childRoot; sid = $sid
       script = $scriptPath; scriptHash = (Get-FileHash $scriptPath).Hash.ToLowerInvariant(); probe = $probe; probeHash = (Get-FileHash $probe).Hash.ToLowerInvariant()
-      pwsh = $tools.pwsh; node = $tools.node; address = (@(Resolve-DnsName github.com -Type A | Where-Object IPAddress | Select-Object -ExpandProperty IPAddress))[0] }
-    Assert-SpikeManifest $manifest; Save-SpikeJson $manifest "$root\manifest.json"
-    foreach ($path in @($root,$scriptPath,"$root\manifest.json",$manifest.pwsh,$manifest.node)) { Assert-SpikeSealed $path }
-    $proof.sources = @{ controller = $manifest.scriptHash; probe = $manifest.probeHash; commit = (& git rev-parse HEAD) }
+      pwsh = $tools.pwsh; node = $tools.node }
+    if (!$connectedPreparation) {
+      $inventory = Get-SpikeInventory
+      $proof.beforeInventory = $inventory
+      $manifest.seconds = 15
+      $manifest.adapters = $inventory.adapters
+      Assert-SpikeManifest $manifest
+    }
+    $manifest.address = (@(Resolve-DnsName github.com -Type A | Where-Object IPAddress | Select-Object -ExpandProperty IPAddress))[0]
+    Save-SpikeJson $manifest "$root\manifest.json"
+    foreach ($path in @($root,$scriptPath,$probe,"$root\manifest.json",$manifest.pwsh,$manifest.node)) { Assert-SpikeSealed $path }
+    $commit = & git rev-parse HEAD
+    if ($connectedPreparation -and ($LASTEXITCODE -ne 0 -or $commit -cnotmatch '^[0-9a-f]{40}$' -or $commit -cne $env:GITHUB_SHA)) { throw 'Connected preparation checkout does not match the workflow commit' }
+    $proof.sources = @{ controller = $manifest.scriptHash; probe = $manifest.probeHash; commit = $commit }
     $proof.tools = @{ pwshPath = $manifest.pwsh; nodePath = $manifest.node; pwsh = (Get-FileHash $manifest.pwsh).Hash; node = (Get-FileHash $manifest.node).Hash; powershellVersion = $PSVersionTable.PSVersion.ToString(); nodeVersion = (& $manifest.node --version); image = $env:ImageVersion; frequency = [Diagnostics.Stopwatch]::Frequency }
     $credential = [pscredential]::new("$env:COMPUTERNAME\$account", $secure)
+    if ($connectedPreparation) { $baselineStarted = Get-SpikeTick }
     $baseline = Start-SpikeMode $manifest 'Child' $credential 'before'
     $owned.Add($baseline)
     if (!$baseline.WaitForExit(20000) -or $baseline.ExitCode -ne 0) { throw 'Standard credential/profile/desktop baseline failed' }
     $proof.before = Read-SpikeJson "$childRoot\before.json"
-    $child = Start-SpikeMode $manifest 'Child' $credential 'during'
-    $owned.Add($child)
-    $ready = Wait-SpikeFile "$childRoot\ready.json"
-    if ($ready.sid -cne $sid -or $ready.pid -ne $child.Id) { throw 'Child readiness identity mismatch' }
-    Save-SpikeJson @{ id = $child.Id; start = $child.StartTime.ToUniversalTime().Ticks } "$root\child.json"
-    $monitor = Start-SpikeMode $manifest 'Monitor' $null; $owned.Add($monitor)
-    $null = Wait-SpikeFile "$root\monitor-ready.json"
-    $supervisor = Start-SpikeMode $manifest 'Supervisor' $null
-    $owned.Add($supervisor)
-    Save-SpikeJson @{ id = $supervisor.Id; start = $supervisor.StartTime.ToUniversalTime().Ticks } "$root\supervisor.json"
-    $action = New-ScheduledTaskAction -Execute $manifest.pwsh -Argument "-NoProfile -File `"$scriptPath`" -Mode Watchdog -State `"$root\manifest.json`"" -WorkingDirectory $root
-    $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 3) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
-    if ($settings.RunOnlyIfNetworkAvailable -or $settings.RunOnlyIfIdle) { throw 'Watchdog has a network/idle scheduling condition' }
-    Register-ScheduledTask -TaskName $task -Action $action -Settings $settings -User 'SYSTEM' -RunLevel Highest | Out-Null; $registered = $true
-    Start-ScheduledTask -TaskName $task
-    $recovery = Wait-SpikeFile "$root\recovery.json" 90
-    if (!$supervisor.WaitForExit(5000)) { throw 'Supervisor did not exit' }
-    if ($Scenario -eq 'normal' -and $supervisor.ExitCode -ne 0) { throw 'Normal supervisor failed' }
-    if ($Scenario -eq 'supervisor-death') {
-      $proof.death = Read-SpikeJson "$root\death.json"
-      if ($supervisor.ExitCode -eq 0 -or $proof.death.pid -ne $supervisor.Id -or $proof.death.reason -cne 'deliberate-supervisor-death') { throw 'Supervisor death injection was not established' }
+    if ($connectedPreparation) {
+      $result = $proof.before
+      if ($result.sid -cne $sid -or $result.pid -ne $baseline.Id -or $result.canaryDenied -ne $true -or $result.outputWritable -ne $true -or $result.profileWritable -ne $true -or $result.start -lt $baselineStarted -or $result.end -lt $result.start -or $result.end -gt (Get-SpikeTick)) { throw 'Connected preparation standard-token receipt is invalid' }
+      Assert-SpikeProbe $result.probe $true
+      if ($result.versions.powershell -cne '7.5.4' -or $result.versions.node -cne 'v24.19.0') { throw 'Connected preparation used unexpected tool versions' }
+      $proof.tools.powershellVersion = $result.versions.powershell
+      $proof.tools.nodeVersion = $result.versions.node
+    } else {
+      $child = Start-SpikeMode $manifest 'Child' $credential 'during'
+      $owned.Add($child)
+      $ready = Wait-SpikeFile "$childRoot\ready.json"
+      if ($ready.sid -cne $sid -or $ready.pid -ne $child.Id) { throw 'Child readiness identity mismatch' }
+      Save-SpikeJson @{ id = $child.Id; start = $child.StartTime.ToUniversalTime().Ticks } "$root\child.json"
+      $monitor = Start-SpikeMode $manifest 'Monitor' $null; $owned.Add($monitor)
+      $null = Wait-SpikeFile "$root\monitor-ready.json"
+      $supervisor = Start-SpikeMode $manifest 'Supervisor' $null
+      $owned.Add($supervisor)
+      Save-SpikeJson @{ id = $supervisor.Id; start = $supervisor.StartTime.ToUniversalTime().Ticks } "$root\supervisor.json"
+      $action = New-ScheduledTaskAction -Execute $manifest.pwsh -Argument "-NoProfile -File `"$scriptPath`" -Mode Watchdog -State `"$root\manifest.json`"" -WorkingDirectory $root
+      $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 3) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+      if ($settings.RunOnlyIfNetworkAvailable -or $settings.RunOnlyIfIdle) { throw 'Watchdog has a network/idle scheduling condition' }
+      Register-ScheduledTask -TaskName $task -Action $action -Settings $settings -User 'SYSTEM' -RunLevel Highest | Out-Null; $registered = $true
+      Start-ScheduledTask -TaskName $task
+      $recovery = Wait-SpikeFile "$root\recovery.json" 90
+      if (!$supervisor.WaitForExit(5000)) { throw 'Supervisor did not exit' }
+      if ($Scenario -eq 'normal' -and $supervisor.ExitCode -ne 0) { throw 'Normal supervisor failed' }
+      if ($Scenario -eq 'supervisor-death') {
+        $proof.death = Read-SpikeJson "$root\death.json"
+        if ($supervisor.ExitCode -eq 0 -or $proof.death.pid -ne $supervisor.Id -or $proof.death.reason -cne 'deliberate-supervisor-death') { throw 'Supervisor death injection was not established' }
+      }
+      $proof.recovery = $recovery; $proof.watchdog = Read-SpikeJson "$root\ack.json"; $proof.arm = Read-SpikeJson "$root\arm.json"
+      if (!$monitor.WaitForExit(5000) -or $monitor.ExitCode -ne 0) { throw 'Independent inventory monitor failed or blocked' }
+      $proof.timeline = Read-SpikeJson "$root\timeline.json"; $proof.disabled = Read-SpikeJson "$root\release.json"
+      $endSamples = @($proof.timeline.samples | Where-Object { $_.isolated -and $_.tick -le $proof.arm.deadline } | Sort-Object tick)
+      if (!$proof.timeline.complete -or !$endSamples.Count -or $endSamples[-1].tick -lt ($proof.arm.deadline - [Diagnostics.Stopwatch]::Frequency)) { throw 'Missing timely final disabled inventory sample' }
+      $proof.endInventory = $endSamples[-1]
+      if (!$child.WaitForExit(1000) -or $child.ExitCode -ne 0) { throw 'Disconnected child failed or was killed at deadline' }
+      $proof.during = Read-SpikeJson "$childRoot\during.json"
+      if ($proof.during.start -lt $proof.disabled.tick -or $proof.during.end -ge $recovery.restoreStart -or $proof.during.end -gt $proof.arm.deadline) { throw 'Probe fell outside the disconnected interval' }
+      Assert-SpikeProbe $proof.before.probe $true; Assert-SpikeProbe $proof.during.probe $false
+      if (!$recovery.pass -or !$recovery.childStopped -or $proof.timeline.error) { throw 'Watchdog recovery proof failed' }
+      $after = Start-SpikeMode $manifest 'Child' $credential 'after'
+      $owned.Add($after)
+      if (!$after.WaitForExit(20000) -or $after.ExitCode -ne 0) { throw 'Same-account post-restoration probe failed' }
+      $proof.after = Read-SpikeJson "$childRoot\after.json"; Assert-SpikeProbe $proof.after.probe $true
     }
-    $proof.recovery = $recovery; $proof.watchdog = Read-SpikeJson "$root\ack.json"; $proof.arm = Read-SpikeJson "$root\arm.json"
-    if (!$monitor.WaitForExit(5000) -or $monitor.ExitCode -ne 0) { throw 'Independent inventory monitor failed or blocked' }
-    $proof.timeline = Read-SpikeJson "$root\timeline.json"; $proof.disabled = Read-SpikeJson "$root\release.json"
-    $endSamples = @($proof.timeline.samples | Where-Object { $_.isolated -and $_.tick -le $proof.arm.deadline } | Sort-Object tick)
-    if (!$proof.timeline.complete -or !$endSamples.Count -or $endSamples[-1].tick -lt ($proof.arm.deadline - [Diagnostics.Stopwatch]::Frequency)) { throw 'Missing timely final disabled inventory sample' }
-    $proof.endInventory = $endSamples[-1]
-    if (!$child.WaitForExit(1000) -or $child.ExitCode -ne 0) { throw 'Disconnected child failed or was killed at deadline' }
-    $proof.during = Read-SpikeJson "$childRoot\during.json"
-    if ($proof.during.start -lt $proof.disabled.tick -or $proof.during.end -ge $recovery.restoreStart -or $proof.during.end -gt $proof.arm.deadline) { throw 'Probe fell outside the disconnected interval' }
-    Assert-SpikeProbe $proof.before.probe $true; Assert-SpikeProbe $proof.during.probe $false
-    if (!$recovery.pass -or !$recovery.childStopped -or $proof.timeline.error) { throw 'Watchdog recovery proof failed' }
-    $after = Start-SpikeMode $manifest 'Child' $credential 'after'
-    $owned.Add($after)
-    if (!$after.WaitForExit(20000) -or $after.ExitCode -ne 0) { throw 'Same-account post-restoration probe failed' }
-    $proof.after = Read-SpikeJson "$childRoot\after.json"; Assert-SpikeProbe $proof.after.probe $true
     $proof.sourceStable = ((Get-FileHash $scriptPath).Hash.ToLowerInvariant() -ceq $manifest.scriptHash -and (Get-FileHash $probe).Hash.ToLowerInvariant() -ceq $manifest.probeHash -and (Get-FileHash $script:spikeSource).Hash.ToLowerInvariant() -ceq $manifest.scriptHash)
+    if ($connectedPreparation) { $proof.sourceStable = $proof.sourceStable -and (Get-FileHash $probeSource).Hash.ToLowerInvariant() -ceq $manifest.probeHash }
     if (!$proof.sourceStable -or (Get-FileHash $manifest.node).Hash -cne $proof.tools.node -or (Get-FileHash $manifest.pwsh).Hash -cne $proof.tools.pwsh) { throw 'Controller, probe or tool bytes drifted' }
     $proof.pass = $true
   } catch { $proof.error = $_.Exception.Message; throw }
   finally {
-    if ($manifest -and (Test-Path "$root\arm.json") -and !(Test-Path "$root\recovery.json")) {
+    if (!$connectedPreparation -and $manifest -and (Test-Path "$root\arm.json") -and !(Test-Path "$root\recovery.json")) {
       try { $null = Wait-SpikeFile "$root\recovery.json" 45 } catch { $proof.recoveryMissing = $true }
     }
     foreach ($process in $owned) {
@@ -463,22 +527,24 @@ function Invoke-SpikeRun {
     try {
       $publicProof = Protect-SpikeEvidence ($proof | ConvertTo-Json -Depth 16) $manifest $root | ConvertFrom-Json -AsHashtable
       if ($tools) { $publicProof.tools += @{ runtimeFiles = $tools.runtimeFiles; runtimeManifest = $tools.runtimeManifest; runtimeHash = $tools.runtimeHash } } # Keep the relative-path manifest bytes intact after redaction.
-      Save-SpikeJson $publicProof (Join-Path $Output 'proof.json')
-      foreach ($name in @('ack.json','arm.json','release.json','disabler-complete.json','recovery-fence.json','recovery.json','timeline.json','death.json','watchdog-error.json')) {
-        if (Test-Path "$root\$name") {
-          $publicReceipt = Protect-SpikeEvidence (Get-Content -LiteralPath "$root\$name" -Raw) $manifest $root
-          Save-SpikeJson ($publicReceipt | ConvertFrom-Json -AsHashtable) (Join-Path $Output $name)
+      Save-SpikeJson $publicProof (Join-Path $Output $receiptName)
+      if (!$connectedPreparation) {
+        foreach ($name in @('ack.json','arm.json','release.json','disabler-complete.json','recovery-fence.json','recovery.json','timeline.json','death.json','watchdog-error.json')) {
+          if (Test-Path "$root\$name") {
+            $publicReceipt = Protect-SpikeEvidence (Get-Content -LiteralPath "$root\$name" -Raw) $manifest $root
+            Save-SpikeJson ($publicReceipt | ConvertFrom-Json -AsHashtable) (Join-Path $Output $name)
+          }
         }
       }
       foreach ($log in Get-ChildItem -LiteralPath $root -File -Filter '*.stderr') {
-        Protect-SpikeEvidence (Get-Content -LiteralPath $log.FullName -Raw) $manifest $root | Set-Content -LiteralPath (Join-Path $Output $log.Name)
+        Protect-SpikeEvidence (Get-Content -LiteralPath $log.FullName -Raw) $manifest $root -PlainText | Set-Content -LiteralPath (Join-Path $Output $log.Name)
       }
     } catch {
       if (!$proof.error) { throw }
       Write-Warning "Evidence export failed ($($_.Exception.GetType().Name)); primary failure retained: $($proof.error)"
     }
   }
-  if (!$proof.pass) { throw 'Spike proof or cleanup failed' }
+  if (!$proof.pass) { throw "Experiment $Scenario or cleanup failed" }
 }
 if ($MyInvocation.InvocationName -eq '.') { return }
 if ($Mode -eq 'Run') { Invoke-SpikeRun; return }

@@ -173,6 +173,18 @@ if ($publicFailureObject.error -ne 'pnp-device-missing' -or $publicFailureObject
 $opaqueManifest = @{ adapters = @(@{ guid = '00000000-0000-0000-0000-000000000004'; device = 'PCI\opaque-pnp'; identityProperties = @{ deviceId = 'opaque-device'; interfaceName = 'NDIS\opaque-interface'; netLuid = '987654321012345' } }) }
 $opaquePublic = Protect-SpikeEvidence ($opaqueManifest | ConvertTo-Json -Depth 6) $opaqueManifest 'C:\controller'
 if ($opaquePublic -match 'opaque-|987654321012345' -or ($opaquePublic | ConvertFrom-Json).adapters[0].identityProperties.netLuid -notmatch '^sha256:[a-f0-9]{64}$') { throw 'Additional adapter identifiers escaped public evidence redaction' }
+$opaqueManifest.adapters[0].identityProperties.netLuid = '1234'
+$collision = @{ tick = 123456; pid = 1234; netLuid = '1234'; error = 'luid=1234 tick=123456' }
+$collisionJson = Protect-SpikeEvidence ($collision | ConvertTo-Json) $opaqueManifest 'C:\controller'
+$publicCollision = $collisionJson | ConvertFrom-Json -AsHashtable
+if ($publicCollision.tick -is [string] -or $publicCollision.tick -ne 123456 -or $publicCollision.pid -is [string] -or $publicCollision.pid -ne 1234 -or $publicCollision.netLuid -notmatch '^sha256:[a-f0-9]{64}$' -or $publicCollision.error -cne "luid=$($publicCollision.netLuid) tick=123456") { throw 'Evidence redaction damaged numeric state or exposed a numeric identifier' }
+if ((Protect-SpikeEvidence $collision.error $opaqueManifest 'C:\controller' -PlainText) -cne $publicCollision.error) { throw 'stderr numeric identifier redaction differs from JSON diagnostics' }
+$escapedLog = Protect-SpikeEvidence 'Path C:\\controller\\log for PCI\\opaque-pnp' $opaqueManifest 'C:\controller' -PlainText
+if ($escapedLog -cnotmatch '^Path \[controller\]\\\\log for sha256:[a-f0-9]{64}$') { throw 'JSON-escaped path or identifier escaped stderr redaction' }
+$siblingManifest = @{ adapters = @(@{ device = 'PCI\interface1' }, @{ device = 'PCI\interface10' }) }
+$longHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes('PCI\interface10'))).ToLowerInvariant()
+$siblingLog = Protect-SpikeEvidence 'PCI\\interface10 PCI\interface10' $siblingManifest '' -PlainText
+if ($siblingLog -cne "sha256:$longHash sha256:$longHash") { throw 'Redaction matched a shorter sibling and exposed the remaining identifier suffix' }
 foreach ($change in @({ $bad.seconds = 0 }, { $bad.adapters = @() }, { $bad.adapters[0].guid = 'garbage' }, { $bad.adapters[0].admin = 'Unknown' })) {
   $bad = $manifest | ConvertTo-Json -Depth 8 | ConvertFrom-Json -AsHashtable
   & $change
@@ -480,4 +492,66 @@ foreach ($name in @('RUNNER_TRACKING_ID','GITHUB_TOKEN','ACTIONS_RUNTIME_TOKEN',
   $blockedJson = $blocked | ConvertTo-Json -Depth 16; $publicBlocked = Protect-SpikeEvidence $blockedJson $manifest $manifest.root
   if ($script:cacheValueReads -ne 0 -or $blockedJson.Contains('tracking-value-sentinel') -or $publicBlocked.Contains('tracking-value-sentinel') -or $blockedJson.Contains('cache-value-sentinel') -or $publicBlocked.Contains('cache-value-sentinel')) { throw 'Environment value was read or escaped diagnostics' }
 }
-Write-Output 'PASS hosted spike guards, recovery fences, deadline independence and immutable-path ACL checks (platform operations mocked)'
+& {
+  $Scenario = 'connected-preflight'; $Output = 'C:\mock-connected-evidence'
+  $expectedSid = 'S-1-5-21-123-456-789-1001'; $expectedCommit = 'b' * 40
+  $expectedRuntime = '{"schema":1,"files":{"pwsh.exe":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}'
+  $expectedRuntimeHash = '490828f682c48cfc7e395bb036df34e1dd02001ee565673c7951da26bfacdbd5'
+  $fixture = @{ branch = 'refs/heads/codex/t00-preflight'; receipt = @{}; launched = @(); forbidden = @(); removed = @() }
+  $childResult = @{ sid = $expectedSid; pid = 1234; canaryDenied = $true; outputWritable = $true; profileWritable = $true; start = 102; end = 102
+    versions = @{ powershell = '7.5.4'; node = 'v24.19.0' }; probe = @{ connected = $true; loopback = $true } }
+  function Get-SpikePlatform { @{ windows = $true; admin = $true; actions = 'true'; runner = 'github-hosted'; workflow = 'T00 disconnect feasibility'; job = 'spike'; temp = 'C:\runner\temp'; branch = $fixture.branch } }
+  function Get-SpikeSid { 'S-1-5-21-123-456-789-500' }
+  function Test-Path { param($LiteralPath,$Path) $false }
+  function Get-ChildItem { param($LiteralPath,[switch]$File,$Filter) }
+  function New-Item { param($ItemType,$Path) }
+  function Copy-Item { param($LiteralPath,$Destination) }
+  function Set-Content { param($LiteralPath,[Parameter(ValueFromPipeline)]$Value) process {} }
+  function New-LocalUser { param($Name,$Password,[switch]$AccountNeverExpires,[switch]$PasswordNeverExpires) @{ SID = @{ Value = $expectedSid } } }
+  function Add-LocalGroupMember { param($SID,$Member) if ($SID -cne 'S-1-5-32-545' -or $Member.SID.Value -cne $expectedSid) { throw 'Unexpected mock group membership' } }
+  function Get-LocalGroup { @{ SID = @{ Value = 'S-1-5-32-545' } } }
+  function Get-LocalGroupMember { param($SID) @{ SID = @{ Value = $expectedSid } } }
+  function Remove-LocalUser { param($Name) $fixture.removed += $Name }
+  function Get-Command { param($Name) @{ Source = $Name } }
+  function Set-SpikeAcl { param($Path,$Sid,$Rights) }
+  function Assert-SpikeSealed { param($Path,$ControllerSid) }
+  function Install-SpikeTools { param($Root,$Pwsh,$Node) @{ pwsh = "$Root\powershell\pwsh.exe"; node = 'nodeFixture'; runtimeFiles = 1; runtimeManifest = $expectedRuntime; runtimeHash = $expectedRuntimeHash } }
+  function Get-FileHash { param($Path,$LiteralPath) @{ Hash = 'A' * 64 } }
+  function git { param($Command,$Revision) $global:LASTEXITCODE = 0; $expectedCommit }
+  function nodeFixture { $global:LASTEXITCODE = 0; 'v24.19.0' }
+  function Resolve-DnsName { param($Name,$Type) @{ IPAddress = '192.0.2.10' } }
+  function Save-SpikeJson($Value, $Path) { $fixture.receipt[[IO.Path]::GetFileName($Path)] = $Value }
+  function Read-SpikeJson($Path) { if ($Path -notlike '*\child\before.json') { throw 'Unexpected receipt read' }; $childResult }
+  function Get-SpikeTick { 102 }
+  function Start-SpikeMode($Manifest, $ChildMode, $Credential, $ChildStage) {
+    $fixture.launched += "$ChildMode/$ChildStage"
+    if ($ChildMode -cne 'Child' -or $ChildStage -cne 'before' -or !$Credential -or $Manifest.sid -cne $expectedSid) { throw 'Unexpected mock launcher inputs' }
+    $process = [pscustomobject]@{ Id = 1234; ExitCode = 0; HasExited = $true }
+    $process | Add-Member ScriptMethod WaitForExit { param($Timeout) $true }
+    $process
+  }
+  function Get-SpikeInventory { $fixture.forbidden += 'inventory'; throw 'Connected preparation reached the NIC inventory' }
+  function Set-SpikeAdapter { $fixture.forbidden += 'NIC mutation'; throw 'Connected preparation reached NIC mutation' }
+  function New-ScheduledTaskAction { $fixture.forbidden += 'watchdog setup'; throw 'Connected preparation reached watchdog setup' }
+  function Register-ScheduledTask { $fixture.forbidden += 'watchdog registration'; throw 'Connected preparation reached watchdog registration' }
+  function Start-ScheduledTask { $fixture.forbidden += 'watchdog start'; throw 'Connected preparation reached watchdog start' }
+  function Unregister-ScheduledTask { $fixture.forbidden += 'watchdog removal'; throw 'Connected preparation reached watchdog removal' }
+  $oldSha = $env:GITHUB_SHA; $env:GITHUB_SHA = $expectedCommit
+  try {
+    Invoke-SpikeRun 1>$null
+    $receipt = $fixture.receipt['connected-preparation.json']
+    if (!$receipt.pass -or $receipt.schema -ne 1 -or $receipt.kind -cne 'connected-preparation' -or $receipt.sources.commit -cne $expectedCommit -or $receipt.sources.controller -cne ('a' * 64) -or $receipt.sources.probe -cne ('a' * 64)) { throw 'Missing or malformed connected preparation receipt' }
+    if ($receipt.tools.runtimeManifest -cne $expectedRuntime -or $receipt.tools.runtimeFiles -ne 1 -or $receipt.tools.runtimeHash -cne $expectedRuntimeHash -or $receipt.tools.powershellVersion -cne '7.5.4' -or $receipt.tools.nodeVersion -cne 'v24.19.0') { throw 'Incorrect runtime manifest in connected receipt' }
+    if ($receipt.before.sid -cne $expectedSid -or !$receipt.before.canaryDenied -or !$receipt.before.probe.connected -or !$receipt.before.probe.loopback) { throw 'Connected receipt lost the standard-user baseline' }
+    if (($fixture.launched -join ',') -cne 'Child/before' -or $fixture.forbidden.Count -or $fixture.removed.Count -ne 1 -or $fixture.receipt.ContainsKey('proof.json')) { throw 'Connected preparation reached a disconnect operation or proof path' }
+    $childResult.probe.loopback = $false; $fixture.receipt.Clear()
+    Assert-Throws { Invoke-SpikeRun 1>$null } 'connected preparation with a failed loopback'
+    if (!$fixture.receipt.ContainsKey('connected-preparation.json') -or $fixture.receipt['connected-preparation.json'].pass -or $fixture.forbidden.Count -or $fixture.removed.Count -ne 2) { throw 'Failed connected probe did not retain failed preparation evidence and clean up' }
+    $Scenario = 'normal'
+    Assert-Throws { Invoke-SpikeRun 1>$null } 'disconnect on connected-preflight branch'
+    $fixture.branch = 'refs/heads/codex/t00-offline-spike'; $Scenario = 'connected-preflight'
+    Assert-Throws { Invoke-SpikeRun 1>$null } 'connected preparation on offline spike branch'
+    if ($fixture.launched.Count -ne 2 -or $fixture.forbidden.Count) { throw 'Cross-branch scenario advanced past its host guard' }
+  } finally { $env:GITHUB_SHA = $oldSha }
+}
+Write-Output 'PASS hosted spike guards, recovery fences, deadline independence, immutable-path ACL checks and connected preparation (platform operations mocked)'
