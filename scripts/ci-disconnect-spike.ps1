@@ -21,7 +21,7 @@ function Save-SpikeJson($Value, [string]$Path) {
   $Value | ConvertTo-Json -Depth 16 | Set-Content -LiteralPath "$Path.tmp"
   Move-Item -LiteralPath "$Path.tmp" -Destination $Path -Force
 }
-function Read-SpikeJson([string]$Path) { Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json -AsHashtable }
+function Read-SpikeJson([string]$Path, [switch]$NoEnumerate) { Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json -AsHashtable -NoEnumerate:$NoEnumerate }
 function Get-SpikePlatform {
   $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
   @{ windows = $IsWindows; admin = ([Security.Principal.WindowsPrincipal]$identity).IsInRole('Administrators'); actions = $env:GITHUB_ACTIONS
@@ -268,6 +268,63 @@ function Install-SpikeTools([string]$Root, [string]$Pwsh, [string]$Node) {
   $receipt = [ordered]@{ schema = 1; files = $files } | ConvertTo-Json -Compress
   @{ pwsh = (Join-Path $runtime 'pwsh.exe'); node = $nodeCopy; runtimeFiles = $files.Count; runtimeManifest = $receipt; runtimeHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($receipt))).ToLowerInvariant() }
 }
+function Get-SpikeTreeSeal([string]$Path, [switch]$SkipRegistryLinks) {
+  Assert-SpikeSealed $Path
+  $files = [Collections.Generic.SortedDictionary[string,string]]::new([StringComparer]::Ordinal)
+  foreach ($item in Get-ChildItem -LiteralPath $Path -Recurse -Force) {
+    Assert-SpikeSealed $item.FullName
+    if (!$item.PSIsContainer) {
+      $relative = [IO.Path]::GetRelativePath($Path, $item.FullName).Replace('\', '/')
+      # Playwright's registry link names and contents depend on the absolute package path.
+      if ($SkipRegistryLinks -and $relative -cmatch '^\.links/[^/]+$') { continue }
+      $files.Add($relative, (Get-FileHash -LiteralPath $item.FullName).Hash.ToLowerInvariant())
+    }
+  }
+  if (!$files.Count) { throw 'Empty Chromium preparation tree' }
+  $bytes = [Text.Encoding]::UTF8.GetBytes((ConvertTo-Json -InputObject $files -Compress))
+  @{ files = $files.Count; sha256 = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant() }
+}
+function Install-SpikeBrowser([string]$Root, [string]$Node, [string]$Source) {
+  $lock = Join-Path $Root 'package-lock.json'; $probe = Join-Path $Root 'browser-probe.mjs'
+  Copy-Item -LiteralPath "$Source\package-lock.json" -Destination $lock
+  Copy-Item -LiteralPath "$Source\scripts\ci-browser-probe.mjs" -Destination $probe
+  Assert-SpikeSealed $lock; Assert-SpikeSealed $probe
+  $locked = Read-SpikeJson $lock
+  $playwright = '1.64.1'
+  $packages = Join-Path $Root 'node_modules'; $cache = Join-Path $Root 'playwright-cache'
+  New-Item -ItemType Directory -Path $packages,$cache | Out-Null
+  foreach ($name in @('playwright','playwright-core')) {
+    $entry = $locked.packages["node_modules/$name"]
+    if ($entry.version -cne $playwright -or $entry.integrity -cnotmatch '^sha512-[A-Za-z0-9+/]{86}==$' -or $entry.resolved -cne "https://registry.npmjs.org/$name/-/$name-$playwright.tgz") { throw 'Playwright package lock differs from the pinned release' }
+    Copy-Item -LiteralPath "$Source\node_modules\$name" -Destination $packages -Recurse
+    if ((Read-SpikeJson "$packages\$name\package.json").version -cne $playwright) { throw 'Installed Playwright package differs from the locked release' }
+  }
+  if ($locked.packages['node_modules/playwright'].dependencies.'playwright-core' -cne $playwright) { throw 'Playwright core does not match the locked dependency' }
+  $packageSeal = Get-SpikeTreeSeal $packages
+  Assert-SpikeSealed $cache
+  $saved = @{}
+  foreach ($item in Get-ChildItem Env: | Where-Object Name -Match '^(PLAYWRIGHT_|NODE_OPTIONS$|NODE_PATH$)') {
+    $saved[$item.Name] = $item.Value
+    [Environment]::SetEnvironmentVariable($item.Name, $null)
+  }
+  try {
+    $env:PLAYWRIGHT_BROWSERS_PATH = $cache
+    & $Node "$packages\playwright\cli.js" install --only-shell chromium *> $null
+    if ($LASTEXITCODE -ne 0) { throw "Pinned Playwright shell installation failed with exit $LASTEXITCODE" }
+  } finally {
+    $env:PLAYWRIGHT_BROWSERS_PATH = $null
+    foreach ($name in $saved.Keys) { [Environment]::SetEnvironmentVariable($name, $saved[$name]) }
+  }
+  $shell = @( (Read-SpikeJson "$packages\playwright-core\browsers.json").browsers | Where-Object name -CEQ 'chromium-headless-shell' )
+  if ($shell.Count -ne 1 -or $shell[0].revision -cnotmatch '^\d{4,6}$' -or $shell[0].browserVersion -cnotmatch '^\d+(\.\d+){3}$') { throw 'Invalid Chromium headless shell in the locked registry' }
+  $revision = $shell[0].revision
+  $executable = "chromium_headless_shell-$revision\chrome-headless-shell-win64\chrome-headless-shell.exe"
+  if (!(Test-Path -LiteralPath "$cache\chromium_headless_shell-$revision\INSTALLATION_COMPLETE" -PathType Leaf) -or @(Get-ChildItem -LiteralPath $cache -Directory -Filter 'chromium-*').Count) { throw 'Expected a complete headless-only Chromium installation' }
+  $cacheSeal = Get-SpikeTreeSeal $cache -SkipRegistryLinks
+  @{ probe = $probe; lock = $lock; packages = $packages; cache = $cache; executable = $executable; playwright = $playwright; revision = $revision; version = $shell[0].browserVersion
+    sha256 = (Get-FileHash -LiteralPath (Join-Path $cache $executable)).Hash.ToLowerInvariant(); lockSha256 = (Get-FileHash -LiteralPath $lock).Hash.ToLowerInvariant(); probeSha256 = (Get-FileHash -LiteralPath $probe).Hash.ToLowerInvariant()
+    packageFiles = $packageSeal.files; packageSha256 = $packageSeal.sha256; cacheFiles = $cacheSeal.files; cacheSha256 = $cacheSeal.sha256 }
+}
 function Wait-SpikeFile([string]$Path, [int]$Seconds = 30) {
   $until = (Get-SpikeTick) + $Seconds * [Diagnostics.Stopwatch]::Frequency
   while (!(Test-Path -LiteralPath $Path)) { if ((Get-SpikeTick) -gt $until) { throw "Timed out waiting for $([IO.Path]::GetFileName($Path))" }; Start-Sleep -Milliseconds 50 }
@@ -323,13 +380,20 @@ function Invoke-SpikeChild($Manifest, [string]$ChildStage) {
   if ($LASTEXITCODE -ne 0 -or $rows.Count -ne 1) { throw 'Finite Node probe failed' }
   $probe = $rows[0] | ConvertFrom-Json -AsHashtable
   Assert-SpikeProbe $probe ($ChildStage -ne 'during')
-  $result = @{ sid = $identity.User.Value; groups = $groups; privileges = $privileges; canaryDenied = $true; outputWritable = $true; profileWritable = $true; start = $start; end = (Get-SpikeTick); probe = $probe }
+  $result = @{ sid = $identity.User.Value; groups = $groups; privileges = $privileges; canaryDenied = $true; outputWritable = $true; profileWritable = $true; start = $start; probe = $probe }
   if ($Manifest.scenario -eq 'connected-preflight') {
     $nodeVersion = & $Manifest.node --version
     if ($LASTEXITCODE -ne 0) { throw 'Node version check failed under the standard token' }
     $result.pid = $PID
     $result.versions = @{ powershell = $PSVersionTable.PSVersion.ToString(); node = $nodeVersion }
+    $env:PLAYWRIGHT_BROWSERS_PATH = $Manifest.browser.cache
+    $env:LOCALAPPDATA = Join-Path $Manifest.childRoot 'local-app-data'; $env:APPDATA = Join-Path $Manifest.childRoot 'app-data'
+    New-Item -ItemType Directory -Path $env:LOCALAPPDATA,$env:APPDATA | Out-Null
+    $rows = @(& $Manifest.node $Manifest.browser.probe $Manifest.browser.executable)
+    if ($LASTEXITCODE -ne 0 -or $rows.Count -ne 1 -or $rows[0].Length -gt 1024) { throw 'Standard-token Chromium headless probe failed' }
+    $result.browser = $rows[0] | ConvertFrom-Json -AsHashtable -NoEnumerate
   }
+  $result.end = Get-SpikeTick
   Save-SpikeJson $result "$($Manifest.childRoot)\$ChildStage.json"
 }
 function Invoke-SpikeWatchdog($Manifest) {
@@ -415,7 +479,7 @@ function Invoke-SpikeRun {
     $receiptName = 'connected-preparation.json'
     $proof.schema = 1
     $proof.kind = 'connected-preparation'
-    $proof.limitation = 'Connected standard-user PowerShell and Node preparation only. T00 remains open.'
+    $proof.limitation = 'Connected standard-user PowerShell, Node and Chromium headless shell preparation only. T00 remains open.'
   }
   $root = Join-Path ([Environment]::GetFolderPath('ProgramFiles')) ("T00-" + [guid]::NewGuid().ToString('N'))
   $account = 't00' + [guid]::NewGuid().ToString('N').Substring(0,12); $task = "T00-$account"
@@ -449,27 +513,55 @@ function Invoke-SpikeRun {
       $manifest.adapters = $inventory.adapters
       Assert-SpikeManifest $manifest
     }
+    $commit = & git rev-parse HEAD
+    if ($connectedPreparation) {
+      if ($LASTEXITCODE -ne 0 -or $commit -cnotmatch '^[0-9a-f]{40}$' -or $commit -cne $env:GITHUB_SHA) { throw 'Connected preparation checkout does not match the workflow commit' }
+      $manifest.browser = Install-SpikeBrowser $root $manifest.node (Split-Path -Parent $PSScriptRoot)
+    }
     $manifest.address = (@(Resolve-DnsName github.com -Type A | Where-Object IPAddress | Select-Object -ExpandProperty IPAddress))[0]
     Save-SpikeJson $manifest "$root\manifest.json"
     foreach ($path in @($root,$scriptPath,$probe,"$root\manifest.json",$manifest.pwsh,$manifest.node)) { Assert-SpikeSealed $path }
-    $commit = & git rev-parse HEAD
-    if ($connectedPreparation -and ($LASTEXITCODE -ne 0 -or $commit -cnotmatch '^[0-9a-f]{40}$' -or $commit -cne $env:GITHUB_SHA)) { throw 'Connected preparation checkout does not match the workflow commit' }
     $proof.sources = @{ controller = $manifest.scriptHash; probe = $manifest.probeHash; commit = $commit }
     $proof.tools = @{ pwshPath = $manifest.pwsh; nodePath = $manifest.node; pwsh = (Get-FileHash $manifest.pwsh).Hash; node = (Get-FileHash $manifest.node).Hash; powershellVersion = $PSVersionTable.PSVersion.ToString(); nodeVersion = (& $manifest.node --version); image = $env:ImageVersion; frequency = [Diagnostics.Stopwatch]::Frequency }
     $credential = [pscredential]::new("$env:COMPUTERNAME\$account", $secure)
     if ($connectedPreparation) { $baselineStarted = Get-SpikeTick }
     $baseline = Start-SpikeMode $manifest 'Child' $credential 'before'
     $owned.Add($baseline)
-    if (!$baseline.WaitForExit(20000) -or $baseline.ExitCode -ne 0) { throw 'Standard credential/profile/desktop baseline failed' }
-    $proof.before = Read-SpikeJson "$childRoot\before.json"
+    $baselineTimeout = if ($connectedPreparation) { 45000 } else { 20000 }
+    if (!$baseline.WaitForExit($baselineTimeout) -or $baseline.ExitCode -ne 0) { throw 'Standard credential/profile/desktop baseline failed' }
     if ($connectedPreparation) {
-      $result = $proof.before
-      if ($result.sid -cne $sid -or $result.pid -ne $baseline.Id -or $result.canaryDenied -ne $true -or $result.outputWritable -ne $true -or $result.profileWritable -ne $true -or $result.start -lt $baselineStarted -or $result.end -lt $result.start -or $result.end -gt (Get-SpikeTick)) { throw 'Connected preparation standard-token receipt is invalid' }
+      try { $result = Read-SpikeJson "$childRoot\before.json" -NoEnumerate } catch { throw 'Connected preparation receipt could not be read' }
+      if ($result -isnot [Collections.IDictionary] -or $result.sid -isnot [string] -or $result.sid -cne $sid -or
+          ($result.pid -isnot [int] -and $result.pid -isnot [long]) -or $result.pid -ne $baseline.Id -or
+          ($result.start -isnot [int] -and $result.start -isnot [long]) -or ($result.end -isnot [int] -and $result.end -isnot [long]) -or
+          $result.start -lt $baselineStarted -or $result.end -lt $result.start -or $result.end -gt (Get-SpikeTick)) { throw 'Connected preparation standard-token receipt is invalid' }
+      foreach ($flag in @('canaryDenied','outputWritable','profileWritable')) {
+        if ($result[$flag] -isnot [bool] -or !$result[$flag]) { throw 'Connected preparation standard-token receipt is invalid' }
+      }
+      if ($result.probe -isnot [Collections.IDictionary] -or $result.probe.loopback -isnot [bool]) { throw 'Connected preparation network probe receipt is invalid' }
       Assert-SpikeProbe $result.probe $true
-      if ($result.versions.powershell -cne '7.5.4' -or $result.versions.node -cne 'v24.19.0') { throw 'Connected preparation used unexpected tool versions' }
+      if ($result.versions -isnot [Collections.IDictionary] -or $result.versions.powershell -isnot [string] -or $result.versions.powershell -cne '7.5.4' -or
+          $result.versions.node -isnot [string] -or $result.versions.node -cne 'v24.19.0') { throw 'Connected preparation used unexpected tool versions' }
       $proof.tools.powershellVersion = $result.versions.powershell
       $proof.tools.nodeVersion = $result.versions.node
+      $browser = $manifest.browser
+      $observed = $result.browser
+      if ($observed -isnot [Collections.IDictionary] -or
+          $observed.version -isnot [string] -or $observed.version -cne $browser.version -or
+          $observed.executable -isnot [string] -or $observed.executable -cne $browser.executable -or
+          $observed.sha256 -isnot [string] -or $observed.sha256 -cne $browser.sha256 -or
+          $observed.profilePrivate -isnot [bool] -or !$observed.profilePrivate -or $observed.dom -isnot [bool] -or !$observed.dom) { throw 'Connected Chromium headless shell receipt is invalid' }
+      $packageSeal = Get-SpikeTreeSeal $browser.packages; $cacheSeal = Get-SpikeTreeSeal $browser.cache -SkipRegistryLinks
+      $sourceRoot = Split-Path -Parent $PSScriptRoot
+      if ($packageSeal.files -ne $browser.packageFiles -or $packageSeal.sha256 -cne $browser.packageSha256 -or $cacheSeal.files -ne $browser.cacheFiles -or $cacheSeal.sha256 -cne $browser.cacheSha256 -or
+        (Get-FileHash -LiteralPath $browser.lock).Hash.ToLowerInvariant() -cne $browser.lockSha256 -or (Get-FileHash -LiteralPath "$sourceRoot\package-lock.json").Hash.ToLowerInvariant() -cne $browser.lockSha256 -or
+        (Get-FileHash -LiteralPath $browser.probe).Hash.ToLowerInvariant() -cne $browser.probeSha256 -or (Get-FileHash -LiteralPath "$PSScriptRoot\ci-browser-probe.mjs").Hash.ToLowerInvariant() -cne $browser.probeSha256) { throw 'Chromium package, cache, lock or probe bytes drifted' }
+      $proof.before = @{ sid = $sid; pid = $baseline.Id; start = $result.start; end = $result.end; canaryDenied = $true; outputWritable = $true; profileWritable = $true
+        probe = @{ connected = $true; loopback = $true }; versions = @{ powershell = $result.versions.powershell; node = $result.versions.node } }
+      $proof.browser = @{ executable = Join-Path $browser.cache $browser.executable; sha256 = $browser.sha256; playwright = $browser.playwright; revision = $browser.revision; version = $browser.version; dom = $true; profilePrivate = $true
+        packageFiles = $browser.packageFiles; packageSha256 = $browser.packageSha256; cacheFiles = $browser.cacheFiles; cacheSha256 = $browser.cacheSha256; lockSha256 = $browser.lockSha256; probeSha256 = $browser.probeSha256 }
     } else {
+      $proof.before = Read-SpikeJson "$childRoot\before.json"
       $child = Start-SpikeMode $manifest 'Child' $credential 'during'
       $owned.Add($child)
       $ready = Wait-SpikeFile "$childRoot\ready.json"
@@ -518,7 +610,13 @@ function Invoke-SpikeRun {
       try { $null = Wait-SpikeFile "$root\recovery.json" 45 } catch { $proof.recoveryMissing = $true }
     }
     foreach ($process in $owned) {
-      if (!$process.HasExited) { try { $null = Stop-SpikeChild @{ id = $process.Id; start = $process.StartTime.ToUniversalTime().Ticks } } catch { $proof.cleanupError = $_.Exception.Message; $proof.pass = $false } }
+      try {
+        if ($process.HasExited) { continue }
+        if ($connectedPreparation) {
+          $process.Kill($true)
+          if (!$process.WaitForExit(5000)) { throw 'Connected preparation parent did not exit after process-tree termination' }
+        } else { $null = Stop-SpikeChild @{ id = $process.Id; start = $process.StartTime.ToUniversalTime().Ticks } }
+      } catch { $proof.cleanupError = $_.Exception.Message; $proof.pass = $false }
     }
     try {
       if ($registered -and (!(Test-Path "$root\arm.json") -or (Test-Path "$root\recovery.json"))) { Unregister-ScheduledTask -TaskName $task -Confirm:$false }
@@ -535,9 +633,9 @@ function Invoke-SpikeRun {
             Save-SpikeJson ($publicReceipt | ConvertFrom-Json -AsHashtable) (Join-Path $Output $name)
           }
         }
-      }
-      foreach ($log in Get-ChildItem -LiteralPath $root -File -Filter '*.stderr') {
-        Protect-SpikeEvidence (Get-Content -LiteralPath $log.FullName -Raw) $manifest $root -PlainText | Set-Content -LiteralPath (Join-Path $Output $log.Name)
+        foreach ($log in Get-ChildItem -LiteralPath $root -File -Filter '*.stderr') {
+          Protect-SpikeEvidence (Get-Content -LiteralPath $log.FullName -Raw) $manifest $root -PlainText | Set-Content -LiteralPath (Join-Path $Output $log.Name)
+        }
       }
     } catch {
       if (!$proof.error) { throw }

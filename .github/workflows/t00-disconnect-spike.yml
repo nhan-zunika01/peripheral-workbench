@@ -29,6 +29,13 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24.19.0'
+      - name: Provision locked npm packages for Chromium
+        if: matrix.scenario == 'connected-preflight'
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          git diff --quiet HEAD -- package-lock.json
+          npm ci --ignore-scripts --include=dev --no-audit --no-fund
+          git diff --quiet HEAD -- package-lock.json
       - name: Provision pinned PowerShell
         run: |
           $ErrorActionPreference = 'Stop'

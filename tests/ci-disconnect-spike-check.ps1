@@ -13,6 +13,43 @@ function Assert-Throws([scriptblock]$Action, [string]$Name) {
   try { & $Action } catch { $failed = $true }
   if (!$failed) { throw "Accepted unsafe scenario: $Name" }
 }
+& {
+  $scratch = [IO.Directory]::CreateTempSubdirectory('t00-browser-seal-')
+  $downloadHost = $env:PLAYWRIGHT_DOWNLOAD_HOST
+  try {
+    $env:PLAYWRIGHT_DOWNLOAD_HOST = 'fixture-download-host'
+    $fixtureSource = Join-Path $scratch.FullName 'source'
+    New-Item -ItemType Directory -Path "$fixtureSource\scripts","$fixtureSource\node_modules\playwright","$fixtureSource\node_modules\playwright-core" | Out-Null
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../package-lock.json') -Destination "$fixtureSource\package-lock.json"
+    'fixture' | Set-Content -LiteralPath "$fixtureSource\scripts\ci-browser-probe.mjs"
+    'fixture cli' | Set-Content -LiteralPath "$fixtureSource\node_modules\playwright\cli.js"
+    '{"version":"1.64.1"}' | Set-Content -LiteralPath "$fixtureSource\node_modules\playwright\package.json","$fixtureSource\node_modules\playwright-core\package.json"
+    '{"browsers":[{"name":"chromium-headless-shell","revision":"1248","browserVersion":"156.0.8078.4"}]}' | Set-Content -LiteralPath "$fixtureSource\node_modules\playwright-core\browsers.json"
+    $sealed = [Collections.Generic.List[string]]::new()
+    function Assert-SpikeSealed($Path) { $sealed.Add($Path) }
+    function installFixture {
+      $cache = $env:PLAYWRIGHT_BROWSERS_PATH
+      $cli = Join-Path (Split-Path -Parent $cache) 'node_modules\playwright\cli.js'
+      if ($env:PLAYWRIGHT_DOWNLOAD_HOST -or $sealed -notcontains $cli -or $args.Count -ne 4 -or $args[0] -cne $cli -or ($args[1..3] -join ' ') -cne 'install --only-shell chromium') { throw 'Unexpected shell installer invocation or environment' }
+      $shell = "$cache\chromium_headless_shell-1248"
+      New-Item -ItemType Directory -Path "$shell\chrome-headless-shell-win64","$cache\.links" | Out-Null
+      'fixture shell' | Set-Content -LiteralPath "$shell\chrome-headless-shell-win64\chrome-headless-shell.exe"
+      '' | Set-Content -LiteralPath "$shell\INSTALLATION_COMPLETE"
+      $cli | Set-Content -LiteralPath "$cache\.links\$([IO.Path]::GetFileName((Split-Path -Parent $cache)))"
+      $global:LASTEXITCODE = 0
+    }
+    $first = New-Item -ItemType Directory -Path (Join-Path $scratch.FullName 'first')
+    $second = New-Item -ItemType Directory -Path (Join-Path $scratch.FullName 'second')
+    $before = Install-SpikeBrowser $first.FullName 'installFixture' $fixtureSource
+    $after = Install-SpikeBrowser $second.FullName 'installFixture' $fixtureSource
+    if ($before.cacheSha256 -cne $after.cacheSha256 -or $before.cacheFiles -ne 2) { throw 'Chromium cache seal depends on absolute paths in registry link metadata' }
+    if ($before.packageSha256 -cne $after.packageSha256 -or $before.packageFiles -ne 4 -or $before.lockSha256 -cne (Get-FileHash -LiteralPath "$fixtureSource\package-lock.json").Hash.ToLowerInvariant()) { throw 'Chromium package or lock evidence is incomplete' }
+    if ($sealed -notcontains "$($first.FullName)\playwright-cache\.links\first" -or $env:PLAYWRIGHT_DOWNLOAD_HOST -cne 'fixture-download-host') { throw 'Chromium registry metadata ACL or installer environment restoration was skipped' }
+  } finally {
+    $env:PLAYWRIGHT_DOWNLOAD_HOST = $downloadHost
+    $scratch.Delete($true)
+  }
+}
 $script:bindingFailure = ''; $script:bindingQueries = 0
 function Get-NetAdapter {
   param([switch]$IncludeHidden)
@@ -497,13 +534,17 @@ foreach ($name in @('RUNNER_TRACKING_ID','GITHUB_TOKEN','ACTIONS_RUNTIME_TOKEN',
   $expectedSid = 'S-1-5-21-123-456-789-1001'; $expectedCommit = 'b' * 40
   $expectedRuntime = '{"schema":1,"files":{"pwsh.exe":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}'
   $expectedRuntimeHash = '490828f682c48cfc7e395bb036df34e1dd02001ee565673c7951da26bfacdbd5'
+  $shell = 'chromium_headless_shell-1248\chrome-headless-shell-win64\chrome-headless-shell.exe'
+  $browser = @{ playwright = '1.64.1'; revision = '1248'; version = '156.0.8078.4'; lockSha256 = 'b' * 64; probeSha256 = 'a' * 64
+    executable = $shell; sha256 = 'c' * 64; packageFiles = 20; packageSha256 = 'd' * 64; cacheFiles = 30; cacheSha256 = 'e' * 64 }
   $fixture = @{ branch = 'refs/heads/codex/t00-preflight'; receipt = @{}; launched = @(); forbidden = @(); removed = @() }
   $childResult = @{ sid = $expectedSid; pid = 1234; canaryDenied = $true; outputWritable = $true; profileWritable = $true; start = 102; end = 102
-    versions = @{ powershell = '7.5.4'; node = 'v24.19.0' }; probe = @{ connected = $true; loopback = $true } }
+    versions = @{ powershell = '7.5.4'; node = 'v24.19.0' }; probe = @{ connected = $true; loopback = $true }
+    browser = @{ version = '156.0.8078.4'; executable = $shell; sha256 = 'c' * 64; profilePrivate = $true; dom = $true } }
   function Get-SpikePlatform { @{ windows = $true; admin = $true; actions = 'true'; runner = 'github-hosted'; workflow = 'T00 disconnect feasibility'; job = 'spike'; temp = 'C:\runner\temp'; branch = $fixture.branch } }
   function Get-SpikeSid { 'S-1-5-21-123-456-789-500' }
   function Test-Path { param($LiteralPath,$Path) $false }
-  function Get-ChildItem { param($LiteralPath,[switch]$File,$Filter) }
+  function Get-ChildItem { param($LiteralPath,[switch]$File,$Filter) if ($Filter -eq '*.stderr') { $fixture.forbidden += 'arbitrary child stderr' } }
   function New-Item { param($ItemType,$Path) }
   function Copy-Item { param($LiteralPath,$Destination) }
   function Set-Content { param($LiteralPath,[Parameter(ValueFromPipeline)]$Value) process {} }
@@ -516,18 +557,29 @@ foreach ($name in @('RUNNER_TRACKING_ID','GITHUB_TOKEN','ACTIONS_RUNTIME_TOKEN',
   function Set-SpikeAcl { param($Path,$Sid,$Rights) }
   function Assert-SpikeSealed { param($Path,$ControllerSid) }
   function Install-SpikeTools { param($Root,$Pwsh,$Node) @{ pwsh = "$Root\powershell\pwsh.exe"; node = 'nodeFixture'; runtimeFiles = 1; runtimeManifest = $expectedRuntime; runtimeHash = $expectedRuntimeHash } }
-  function Get-FileHash { param($Path,$LiteralPath) @{ Hash = 'A' * 64 } }
+  function Install-SpikeBrowser($Root, $Node, $Source) { $browser + @{ cache = "$Root\playwright-cache"; packages = "$Root\node_modules"; lock = "$Root\package-lock.json"; probe = "$Root\browser-probe.mjs" } }
+  function Get-SpikeTreeSeal($Path) {
+    if ($Path -like '*\node_modules') { return @{ files = 20; sha256 = 'd' * 64 } }
+    if ($Path -like '*\playwright-cache') { return @{ files = 30; sha256 = 'e' * 64 } }
+    throw 'Unexpected browser tree seal check'
+  }
+  function Get-FileHash { param($Path,$LiteralPath) @{ Hash = $(if ($LiteralPath -like '*\package-lock.json') { 'B' * 64 } else { 'A' * 64 }) } }
   function git { param($Command,$Revision) $global:LASTEXITCODE = 0; $expectedCommit }
   function nodeFixture { $global:LASTEXITCODE = 0; 'v24.19.0' }
   function Resolve-DnsName { param($Name,$Type) @{ IPAddress = '192.0.2.10' } }
   function Save-SpikeJson($Value, $Path) { $fixture.receipt[[IO.Path]::GetFileName($Path)] = $Value }
-  function Read-SpikeJson($Path) { if ($Path -notlike '*\child\before.json') { throw 'Unexpected receipt read' }; $childResult }
+  function Read-SpikeJson($Path) {
+    if ($Path -notlike '*\child\before.json') { throw 'Unexpected receipt read' }
+    if ($fixture.parseError) { throw 'Malformed JSON at parse-extra-sentinel' }
+    $childResult.Clone()
+  }
   function Get-SpikeTick { 102 }
   function Start-SpikeMode($Manifest, $ChildMode, $Credential, $ChildStage) {
     $fixture.launched += "$ChildMode/$ChildStage"
     if ($ChildMode -cne 'Child' -or $ChildStage -cne 'before' -or !$Credential -or $Manifest.sid -cne $expectedSid) { throw 'Unexpected mock launcher inputs' }
-    $process = [pscustomobject]@{ Id = 1234; ExitCode = 0; HasExited = $true }
-    $process | Add-Member ScriptMethod WaitForExit { param($Timeout) $true }
+    $process = [pscustomobject]@{ Id = 1234; ExitCode = 0; HasExited = !$fixture.timeout; State = $fixture }
+    $process | Add-Member ScriptMethod Kill { param($Tree) $this.State.kills += @($Tree); $this.HasExited = !$this.State.stuck }
+    $process | Add-Member ScriptMethod WaitForExit { param($Timeout) $this.State.waits += @($Timeout); $this.HasExited }
     $process
   }
   function Get-SpikeInventory { $fixture.forbidden += 'inventory'; throw 'Connected preparation reached the NIC inventory' }
@@ -538,20 +590,53 @@ foreach ($name in @('RUNNER_TRACKING_ID','GITHUB_TOKEN','ACTIONS_RUNTIME_TOKEN',
   function Unregister-ScheduledTask { $fixture.forbidden += 'watchdog removal'; throw 'Connected preparation reached watchdog removal' }
   $oldSha = $env:GITHUB_SHA; $env:GITHUB_SHA = $expectedCommit
   try {
+    $childResult.extra = 'receipt-extra-sentinel'
+    $childResult.probe.extra = 'probe-extra-sentinel'
+    $childResult.versions.extra = 'versions-extra-sentinel'
     Invoke-SpikeRun 1>$null
     $receipt = $fixture.receipt['connected-preparation.json']
+    if (($receipt | ConvertTo-Json -Depth 16) -match 'extra-sentinel') { throw 'Connected receipt published arbitrary child fields' }
     if (!$receipt.pass -or $receipt.schema -ne 1 -or $receipt.kind -cne 'connected-preparation' -or $receipt.sources.commit -cne $expectedCommit -or $receipt.sources.controller -cne ('a' * 64) -or $receipt.sources.probe -cne ('a' * 64)) { throw 'Missing or malformed connected preparation receipt' }
     if ($receipt.tools.runtimeManifest -cne $expectedRuntime -or $receipt.tools.runtimeFiles -ne 1 -or $receipt.tools.runtimeHash -cne $expectedRuntimeHash -or $receipt.tools.powershellVersion -cne '7.5.4' -or $receipt.tools.nodeVersion -cne 'v24.19.0') { throw 'Incorrect runtime manifest in connected receipt' }
     if ($receipt.before.sid -cne $expectedSid -or !$receipt.before.canaryDenied -or !$receipt.before.probe.connected -or !$receipt.before.probe.loopback) { throw 'Connected receipt lost the standard-user baseline' }
+    if (!$receipt.browser.dom -or !$receipt.browser.profilePrivate -or $receipt.browser.executable -cne "[controller]\playwright-cache\$shell" -or $receipt.browser.version -cne '156.0.8078.4' -or $receipt.browser.playwright -cne '1.64.1' -or $receipt.browser.revision -cne '1248' -or $receipt.browser.sha256 -cne ('c' * 64) -or $receipt.browser.lockSha256 -cne ('b' * 64) -or $receipt.browser.packageSha256 -cne ('d' * 64) -or $receipt.browser.cacheSha256 -cne ('e' * 64) -or $receipt.before.browser) { throw 'Chromium headless shell proof is missing or invalid' }
     if (($fixture.launched -join ',') -cne 'Child/before' -or $fixture.forbidden.Count -or $fixture.removed.Count -ne 1 -or $fixture.receipt.ContainsKey('proof.json')) { throw 'Connected preparation reached a disconnect operation or proof path' }
     $childResult.probe.loopback = $false; $fixture.receipt.Clear()
     Assert-Throws { Invoke-SpikeRun 1>$null } 'connected preparation with a failed loopback'
     if (!$fixture.receipt.ContainsKey('connected-preparation.json') -or $fixture.receipt['connected-preparation.json'].pass -or $fixture.forbidden.Count -or $fixture.removed.Count -ne 2) { throw 'Failed connected probe did not retain failed preparation evidence and clean up' }
+    $childResult.probe.loopback = $true; $childResult.browser.sha256 = 'f' * 64; $childResult.browser.untrusted = 'child-log-secret-sentinel'; $fixture.receipt.Clear()
+    Assert-Throws { Invoke-SpikeRun 1>$null } 'connected Chromium with mismatched executable hash'
+    $failed = $fixture.receipt['connected-preparation.json']
+    if (!$failed -or $failed.pass -or $failed.browser -or $fixture.forbidden.Count -or $fixture.removed.Count -ne 3 -or ($failed | ConvertTo-Json -Depth 16).Contains('child-log-secret-sentinel')) { throw 'Invalid Chromium evidence passed or leaked child output' }
     $Scenario = 'normal'
     Assert-Throws { Invoke-SpikeRun 1>$null } 'disconnect on connected-preflight branch'
     $fixture.branch = 'refs/heads/codex/t00-offline-spike'; $Scenario = 'connected-preflight'
     Assert-Throws { Invoke-SpikeRun 1>$null } 'connected preparation on offline spike branch'
-    if ($fixture.launched.Count -ne 2 -or $fixture.forbidden.Count) { throw 'Cross-branch scenario advanced past its host guard' }
+    if ($fixture.launched.Count -ne 3 -or $fixture.forbidden.Count) { throw 'Cross-branch scenario advanced past its host guard' }
+    $fixture.branch = 'refs/heads/codex/t00-preflight'
+    $childResult.browser.sha256 = $browser.sha256
+    $validBrowser = $childResult.browser.Clone()
+    foreach ($field in @('version','executable','sha256','browser')) {
+      $childResult.browser = $validBrowser.Clone()
+      if ($field -eq 'browser') { $childResult.browser = @($validBrowser) }
+      else { $childResult.browser[$field] = @($validBrowser[$field]) }
+      $fixture.receipt.Clear()
+      Assert-Throws { Invoke-SpikeRun 1>$null } "connected Chromium array in $field"
+      $failed = $fixture.receipt['connected-preparation.json']
+      if (!$failed -or $failed.pass -or $failed.browser -or $failed.before -or ($failed | ConvertTo-Json -Depth 16) -match 'extra-sentinel') { throw "Malformed Chromium $field produced child evidence" }
+    }
+    $fixture.parseError = $true; $fixture.receipt.Clear()
+    Assert-Throws { Invoke-SpikeRun 1>$null } 'malformed connected JSON'
+    $failed = $fixture.receipt['connected-preparation.json']
+    if ($failed.error -cne 'Connected preparation receipt could not be read' -or $failed.before -or ($failed | ConvertTo-Json -Depth 16) -match 'extra-sentinel') { throw 'Malformed child JSON escaped error redaction' }
+    $fixture.parseError = $false; $fixture.timeout = $true
+    foreach ($stuck in @($false,$true)) {
+      $fixture.stuck = $stuck; $fixture.kills = @(); $fixture.waits = @(); $fixture.receipt.Clear()
+      Assert-Throws { Invoke-SpikeRun 1>$null } 'connected Chromium baseline timeout'
+      $failed = $fixture.receipt['connected-preparation.json']
+      if (!$failed -or $failed.pass -or $failed.before -or [bool]$failed.cleanupError -ne $stuck -or
+          $fixture.kills.Count -ne 1 -or $fixture.kills[0] -ne $true -or $fixture.waits.Count -ne 2 -or $fixture.waits[1] -le 0) { throw 'Connected timeout did not terminate the owned process tree and check parent exit' }
+    }
   } finally { $env:GITHUB_SHA = $oldSha }
 }
 Write-Output 'PASS hosted spike guards, recovery fences, deadline independence, immutable-path ACL checks and connected preparation (platform operations mocked)'
